@@ -700,7 +700,7 @@
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(addPanel, 500);
-            setTimeout(function() { if (!newsInitialized) initNewsPage(); }, 800;)
+            setTimeout(function() { if (!newsInitialized) initNewsPage(); }, 800);
         });
     } else {
         setTimeout(addPanel, 500);
