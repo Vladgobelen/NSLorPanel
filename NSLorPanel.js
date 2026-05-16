@@ -24,6 +24,7 @@
     var currentModal = null;
     var scrollTimer = null;
     var currentPageSaved = false;
+    var pageLoadTime = Date.now();
 
     function getDefaultSettings() {
         return {
@@ -182,34 +183,6 @@
     function isTopicPage() {
         return window.location.href.match(/\/(news|forum|tracker)\/.*\/comments/) !== null ||
                window.location.href.match(/\/news\/.*\/page\d+/) !== null;
-    }
-
-    function updateSavedPageData() {
-        if (!isTopicPage()) {
-            currentPageSaved = false;
-            return;
-        }
-
-        var pageId = getPageIdentifier();
-        var savedPages = getSavedPages();
-        var found = savedPages.find(function(p) { return p.url === pageId; });
-
-        if (found) {
-            currentPageSaved = true;
-            found.scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
-            found.commentCount = getCommentCount();
-            found.lastChecked = new Date().toISOString();
-            saveSavedPages(savedPages);
-
-            if (found.scrollPosition > 0 && !sessionStorage.getItem('scroll_restored_' + pageId)) {
-                setTimeout(function() {
-                    window.scrollTo({ top: found.scrollPosition, behavior: 'smooth' });
-                    sessionStorage.setItem('scroll_restored_' + pageId, 'true');
-                }, 1000);
-            }
-        } else {
-            currentPageSaved = false;
-        }
     }
 
     function showBlacklistModal() {
@@ -377,7 +350,19 @@
         if (rect.top < window.innerHeight) loadNextPage();
 
         clearTimeout(scrollTimer);
-        scrollTimer = setTimeout(updateSavedPageData, 1000);
+        scrollTimer = setTimeout(saveScrollPosition, 2000);
+    }
+
+    function saveScrollPosition() {
+        if (Date.now() - pageLoadTime < 2000) return;
+        var pageId = getPageIdentifier();
+        var savedPages = getSavedPages();
+        var found = savedPages.find(function(p) { return p.url === pageId; });
+        if (found) {
+            found.scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+            found.lastChecked = new Date().toISOString();
+            saveSavedPages(savedPages);
+        }
     }
 
     function getCurrentTheme() {
@@ -630,8 +615,9 @@
                              'и показывает количество новых сообщений.<br>' +
                              '<b>ПКМ:</b> Сохраняет текущую страницу. Запоминается URL, заголовок, ' +
                              'количество комментариев и позиция скролла. ' +
-                             'При повторном заходе на сохранённую страницу автоматически ' +
-                             'восстанавливается позиция скролла.<br>' +
+                             'При первом заходе на сохранённую страницу после перезагрузки ' +
+                             'автоматически восстанавливается позиция скролла. ' +
+                             'Позиция обновляется автоматически при скролле через 2 секунды после остановки.<br>' +
                              '<b>ЛКМ по сохранённой странице:</b> Переход на страницу.<br>' +
                              '<b>Колесо по сохранённой странице:</b> Открыть в новой вкладке.<br>' +
                              '<b>ПКМ по сохранённой странице:</b> Удалить из списка.'
@@ -699,7 +685,7 @@
 
             var footerHelp = document.createElement('div');
             footerHelp.style.cssText = 'margin-top:' + Math.round(20 * modalScale) + 'px;padding-top:' + Math.round(12 * modalScale) + 'px;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;';
-            footerHelp.textContent = 'NSLorPanel v1.0 • Все данные хранятся в localStorage вашего браузера';
+            footerHelp.textContent = 'NSLorPanel v1.1 • Все данные хранятся в localStorage вашего браузера';
             content.appendChild(footerHelp);
         }
 
@@ -1423,37 +1409,36 @@
     }
 
     function updateSavedPageData() {
-        if (!isTopicPage()) {
-            currentPageSaved = false;
-            return;
-        }
-
         var pageId = getPageIdentifier();
         var savedPages = getSavedPages();
         var foundIndex = savedPages.findIndex(function(p) { return p.url === pageId; });
 
         if (foundIndex !== -1) {
             currentPageSaved = true;
-            var currentCommentCount = getCommentCount();
-            var currentScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
-
-            // Автоматически обновляем данные при заходе на сохраненную страницу
-            savedPages[foundIndex].commentCount = currentCommentCount;
-            savedPages[foundIndex].scrollPosition = currentScrollPosition;
-            savedPages[foundIndex].lastChecked = new Date().toISOString();
-            saveSavedPages(savedPages);
+            var savedPosition = savedPages[foundIndex].scrollPosition;
 
             // Восстанавливаем позицию скролла при первом заходе
-            if (!sessionStorage.getItem('scroll_restored_' + pageId)) {
-                var savedPosition = savedPages[foundIndex].scrollPosition;
-                if (savedPosition > 0) {
-                    setTimeout(function() {
-                        window.scrollTo({ top: savedPosition, behavior: 'smooth' });
-                        sessionStorage.setItem('scroll_restored_' + pageId, 'true');
-                    }, 1000);
-                } else {
+            if (!sessionStorage.getItem('scroll_restored_' + pageId) && savedPosition > 0) {
+                setTimeout(function() {
+                    window.scrollTo({ top: savedPosition, behavior: 'smooth' });
                     sessionStorage.setItem('scroll_restored_' + pageId, 'true');
-                }
+
+                    // Обновляем количество комментариев и позицию после восстановления
+                    var currentCommentCount = getCommentCount();
+                    var currentScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+                    savedPages[foundIndex].commentCount = currentCommentCount;
+                    savedPages[foundIndex].scrollPosition = currentScrollPosition;
+                    savedPages[foundIndex].lastChecked = new Date().toISOString();
+                    saveSavedPages(savedPages);
+                }, 1500);
+            } else if (sessionStorage.getItem('scroll_restored_' + pageId)) {
+                // Если уже восстанавливали, просто обновляем данные
+                var currentCommentCount = getCommentCount();
+                var currentScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+                savedPages[foundIndex].commentCount = currentCommentCount;
+                savedPages[foundIndex].scrollPosition = currentScrollPosition;
+                savedPages[foundIndex].lastChecked = new Date().toISOString();
+                saveSavedPages(savedPages);
             }
         } else {
             currentPageSaved = false;
@@ -1491,6 +1476,7 @@
                 }, 1500);
             }
 
+            // Сбрасываем флаг восстановления
             sessionStorage.removeItem('scroll_restored_' + pageId);
         } else {
             // Добавляем новую
@@ -1506,16 +1492,14 @@
             currentPageSaved = true;
 
             if (savedBtn) {
-                var originalText = savedBtn.textContent;
+                var originalText2 = savedBtn.textContent;
                 savedBtn.textContent = '✓';
                 savedBtn.style.color = '#4CAF50';
                 setTimeout(function() {
-                    savedBtn.textContent = originalText;
+                    savedBtn.textContent = originalText2;
                     savedBtn.style.color = '';
                 }, 1500);
             }
-
-            sessionStorage.removeItem('scroll_restored_' + pageId);
         }
     }
 
@@ -1786,6 +1770,12 @@
                 }
             }, 5000);
         }
+
+        // Обработчик скролла для автосохранения позиции
+        window.addEventListener('scroll', function() {
+            clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(saveScrollPosition, 2000);
+        });
     }
 
     document.addEventListener('click', function(e) {
@@ -1838,6 +1828,7 @@
     }
 
     window.addEventListener('load', function() {
+        pageLoadTime = Date.now();
         setTimeout(scrollToLastMod, 1000);
         setTimeout(updateSavedPageData, 1500);
     });
