@@ -1,1 +1,3 @@
 .zshistory
+*.zshistory
+.zsh_history
