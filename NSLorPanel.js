@@ -1422,39 +1422,100 @@
             });
     }
 
+    function updateSavedPageData() {
+        if (!isTopicPage()) {
+            currentPageSaved = false;
+            return;
+        }
+
+        var pageId = getPageIdentifier();
+        var savedPages = getSavedPages();
+        var foundIndex = savedPages.findIndex(function(p) { return p.url === pageId; });
+
+        if (foundIndex !== -1) {
+            currentPageSaved = true;
+            var currentCommentCount = getCommentCount();
+            var currentScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
+
+            // Автоматически обновляем данные при заходе на сохраненную страницу
+            savedPages[foundIndex].commentCount = currentCommentCount;
+            savedPages[foundIndex].scrollPosition = currentScrollPosition;
+            savedPages[foundIndex].lastChecked = new Date().toISOString();
+            saveSavedPages(savedPages);
+
+            // Восстанавливаем позицию скролла при первом заходе
+            if (!sessionStorage.getItem('scroll_restored_' + pageId)) {
+                var savedPosition = savedPages[foundIndex].scrollPosition;
+                if (savedPosition > 0) {
+                    setTimeout(function() {
+                        window.scrollTo({ top: savedPosition, behavior: 'smooth' });
+                        sessionStorage.setItem('scroll_restored_' + pageId, 'true');
+                    }, 1000);
+                } else {
+                    sessionStorage.setItem('scroll_restored_' + pageId, 'true');
+                }
+            }
+        } else {
+            currentPageSaved = false;
+        }
+    }
+
     function addCurrentPageToSaved() {
         var currentUrl = window.location.href;
         var pageId = getPageIdentifier();
         var savedPages = getSavedPages();
-
-        if (savedPages.find(function(p) { return p.url === pageId; })) {
-            alert('Эта страница уже сохранена');
-            return;
-        }
+        var foundIndex = savedPages.findIndex(function(p) { return p.url === pageId; });
 
         var title = document.title || currentUrl;
         title = title.replace(' - Linux.org.ru', '').trim();
-
-        savedPages.push({
-            url: pageId,
-            title: title,
-            commentCount: getCommentCount(),
-            scrollPosition: window.pageYOffset || document.documentElement.scrollTop,
-            lastChecked: new Date().toISOString()
-        });
-
-        saveSavedPages(savedPages);
-        currentPageSaved = true;
+        var currentCommentCount = getCommentCount();
+        var currentScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
 
         var savedBtn = allButtons['saved'];
-        if (savedBtn) {
-            var originalText = savedBtn.textContent;
-            savedBtn.textContent = '✓';
-            savedBtn.style.color = '#4CAF50';
-            setTimeout(function() {
-                savedBtn.textContent = originalText;
-                savedBtn.style.color = '';
-            }, 1500);
+
+        if (foundIndex !== -1) {
+            // Обновляем существующую
+            savedPages[foundIndex].commentCount = currentCommentCount;
+            savedPages[foundIndex].scrollPosition = currentScrollPosition;
+            savedPages[foundIndex].lastChecked = new Date().toISOString();
+            saveSavedPages(savedPages);
+            currentPageSaved = true;
+
+            if (savedBtn) {
+                var originalText = savedBtn.textContent;
+                savedBtn.textContent = '↻';
+                savedBtn.style.color = '#4a90d9';
+                setTimeout(function() {
+                    savedBtn.textContent = originalText;
+                    savedBtn.style.color = '';
+                }, 1500);
+            }
+
+            sessionStorage.removeItem('scroll_restored_' + pageId);
+        } else {
+            // Добавляем новую
+            savedPages.push({
+                url: pageId,
+                title: title,
+                commentCount: currentCommentCount,
+                scrollPosition: currentScrollPosition,
+                lastChecked: new Date().toISOString()
+            });
+
+            saveSavedPages(savedPages);
+            currentPageSaved = true;
+
+            if (savedBtn) {
+                var originalText = savedBtn.textContent;
+                savedBtn.textContent = '✓';
+                savedBtn.style.color = '#4CAF50';
+                setTimeout(function() {
+                    savedBtn.textContent = originalText;
+                    savedBtn.style.color = '';
+                }, 1500);
+            }
+
+            sessionStorage.removeItem('scroll_restored_' + pageId);
         }
     }
 
