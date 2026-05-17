@@ -1458,7 +1458,9 @@
 
             var cleanUrl = topicLink.href.replace(/[?&]lastmod=\d+/g, '');
             var currentCount = parseInt(cells[3].textContent.trim()) || 0;
-            var oldCount = oldCache[cleanUrl] || 0; // Из СТАРОГО кэша
+
+            var wasInCache = oldCache.hasOwnProperty(cleanUrl);
+            var oldCount = wasInCache ? oldCache[cleanUrl] : 0;
             var diff = currentCount - oldCount;
 
             newCache[cleanUrl] = currentCount;
@@ -1470,10 +1472,10 @@
             td.className = 'lor-new-comments-col';
             td.style.cssText = 'text-align:center;font-weight:bold;';
 
-            if (oldCount === 0) {
+            if (!wasInCache) {
                 td.textContent = '—';
                 td.style.color = '#888';
-                td.title = 'Первый заход (не с чем сравнивать)';
+                td.title = 'Новая тема (не с чем сравнивать)';
             } else if (diff > 0) {
                 td.textContent = '+' + diff;
                 td.style.color = '#4CAF50';
