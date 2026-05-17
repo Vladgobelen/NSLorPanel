@@ -659,6 +659,13 @@
                              'Для мини-новостей выполняется проверка автора через загрузку полной новости.'
                 },
                 {
+                    title: '📊 Новые комментарии в трекере',
+                    content: 'На странице трекера добавляется колонка "Новых", которая показывает ' +
+                             'количество новых комментариев в темах с момента последнего посещения. ' +
+                             'Данные сохраняются в localStorage и обновляются при каждом заходе на страницу. ' +
+                             'Темы с новыми комментариями подсвечиваются зелёным фоном.'
+                },
+                {
                     title: '🎨 Темы оформления',
                     content: 'Панель и все модальные окна автоматически подстраиваются под текущую ' +
                              'тему сайта (black, tango, tango-light, white2, waltz, zomg_ponies). ' +
@@ -685,7 +692,7 @@
 
             var footerHelp = document.createElement('div');
             footerHelp.style.cssText = 'margin-top:' + Math.round(20 * modalScale) + 'px;padding-top:' + Math.round(12 * modalScale) + 'px;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;';
-            footerHelp.textContent = 'NSLorPanel v1.1 • Все данные хранятся в localStorage вашего браузера';
+            footerHelp.textContent = 'NSLorPanel v1.2 • Все данные хранятся в localStorage вашего браузера';
             content.appendChild(footerHelp);
         }
 
@@ -1141,6 +1148,7 @@
                 var topics = parseTrackerTopics(html);
                 var cache = getTrackerCache();
                 var hasChanges = false;
+                var newCache = {};
 
                 content.innerHTML = '';
                 content.style.textAlign = 'left';
@@ -1160,6 +1168,9 @@
                     var oldCount = cache[cleanUrl] || 0;
                     var newCount = topic.messageCount;
                     var diff = newCount - oldCount;
+
+                    // Сохраняем в новый кэш (не перезаписываем старый пока не отрисовали)
+                    newCache[cleanUrl] = newCount;
 
                     if (diff > 0 && oldCount > 0) {
                         hasChanges = true;
@@ -1198,22 +1209,32 @@
 
                     row.appendChild(infoDiv);
 
-                    var countDiv = document.createElement('div');
-                    countDiv.style.cssText = 'text-align:right;margin-left:' + Math.round(12 * modalScale) + 'px;min-width:' + Math.round(60 * modalScale) + 'px;';
+                    var statsDiv = document.createElement('div');
+                    statsDiv.style.cssText = 'text-align:right;margin-left:' + Math.round(12 * modalScale) + 'px;min-width:' + Math.round(80 * modalScale) + 'px;';
 
                     var countText = document.createElement('div');
                     countText.textContent = newCount + ' сообщ.';
                     countText.style.cssText = 'font-size:' + Math.round(14 * modalScale) + 'px;font-weight:bold;';
-                    countDiv.appendChild(countText);
+                    statsDiv.appendChild(countText);
 
                     if (diff > 0 && oldCount > 0) {
                         var newText = document.createElement('div');
                         newText.textContent = '+' + diff + ' новых';
                         newText.style.cssText = 'font-size:' + Math.round(11 * modalScale) + 'px;color:#4CAF50;font-weight:bold;';
-                        countDiv.appendChild(newText);
+                        statsDiv.appendChild(newText);
+                    } else if (oldCount > 0) {
+                        var noNewText = document.createElement('div');
+                        noNewText.textContent = '0 новых';
+                        noNewText.style.cssText = 'font-size:' + Math.round(11 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';';
+                        statsDiv.appendChild(noNewText);
+                    } else {
+                        var noDataText = document.createElement('div');
+                        noDataText.textContent = '—';
+                        noDataText.style.cssText = 'font-size:' + Math.round(11 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';';
+                        statsDiv.appendChild(noDataText);
                     }
 
-                    row.appendChild(countDiv);
+                    row.appendChild(statsDiv);
 
                     row.onmouseenter = function() {
                         if (!(diff > 0 && oldCount > 0)) {
@@ -1247,14 +1268,12 @@
                         }
                     };
 
-                    cache[cleanUrl] = newCount;
-
                     list.appendChild(row);
                 });
 
                 content.appendChild(list);
 
-                saveTrackerCache(cache);
+                saveTrackerCache(newCache);
 
                 if (hasChanges && allButtons['tracker']) {
                     allButtons['tracker'].style.background = '#4CAF50';
@@ -1406,6 +1425,81 @@
 
                 content.appendChild(list);
             });
+    }
+
+    function updateTrackerTable() {
+        var table = document.querySelector('table.message-table');
+        if (!table) return;
+
+        if (!location.href.match(/\/tracker\/?$/)) return;
+
+        var oldCache = getTrackerCache();
+        var hasChanges = false;
+
+        var headerRow = table.querySelector('thead tr');
+        if (headerRow && !headerRow.querySelector('.lor-new-comments-col')) {
+            var th = document.createElement('th');
+            th.className = 'lor-new-comments-col';
+            th.textContent = 'Новых';
+            th.style.cssText = 'text-align:center;color:#4CAF50;';
+            headerRow.appendChild(th);
+        }
+
+        var rows = table.querySelectorAll('tbody tr');
+
+        rows.forEach(function(row) {
+            if (row.querySelector('th')) return;
+            var cells = row.querySelectorAll('td');
+            if (cells.length < 4) return;
+
+            var topicLink = cells[1].querySelector('a');
+            if (!topicLink) return;
+
+            var cleanUrl = topicLink.href.replace(/[?&]lastmod=\d+/g, '');
+            var currentCount = parseInt(cells[3].textContent.trim()) || 0;
+            var oldCount = oldCache[cleanUrl] || 0;
+            var diff = currentCount - oldCount;
+
+            var existingCol = row.querySelector('.lor-new-comments-col');
+            if (existingCol) existingCol.remove();
+
+            var td = document.createElement('td');
+            td.className = 'lor-new-comments-col';
+            td.style.cssText = 'text-align:center;font-weight:bold;';
+
+            if (oldCount === 0) {
+                td.textContent = '—';
+                td.style.color = '#888';
+                td.title = 'Нет данных (откройте модальное окно трекера через ПКМ)';
+            } else if (diff > 0) {
+                td.textContent = '+' + diff;
+                td.style.color = '#4CAF50';
+                td.style.background = 'rgba(76,175,80,0.15)';
+                td.style.borderRadius = '3px';
+                td.title = 'Было: ' + oldCount + ', стало: ' + currentCount;
+                hasChanges = true;
+            } else if (diff === 0) {
+                td.textContent = '0';
+                td.style.color = '#888';
+                td.title = 'Было: ' + oldCount + ', стало: ' + currentCount + ' (без изменений)';
+            } else {
+                td.textContent = diff;
+                td.style.color = '#ff6666';
+                td.title = 'Было: ' + oldCount + ', стало: ' + currentCount;
+            }
+
+            row.appendChild(td);
+        });
+
+        if (hasChanges && allButtons['tracker']) {
+            allButtons['tracker'].style.background = '#4CAF50';
+            setTimeout(function() {
+                if (allButtons['tracker']) {
+                    var colors = getThemeColors();
+                    allButtons['tracker'].style.background = colors.btnBg;
+                }
+            }, 3000);
+        }
     }
 
     function updateSavedPageData() {
@@ -1788,6 +1882,10 @@
         return location.pathname === '/news/' || location.pathname === '/news';
     }
 
+    function isTrackerPage() {
+        return location.href.match(/\/tracker\/?$/) !== null;
+    }
+
     function initNewsPage() {
         if (newsInitialized) return;
         if (!isNewsPage()) return;
@@ -1827,10 +1925,17 @@
         window.addEventListener('scroll', onScroll);
     }
 
+    function initTrackerPage() {
+        if (isTrackerPage()) {
+            setTimeout(updateTrackerTable, 500);
+        }
+    }
+
     window.addEventListener('load', function() {
         pageLoadTime = Date.now();
         setTimeout(scrollToLastMod, 1000);
         setTimeout(updateSavedPageData, 1500);
+        setTimeout(initTrackerPage, 800);
     });
 
     if (document.readyState === 'loading') {
@@ -1839,6 +1944,7 @@
             setTimeout(function() {
                 if (!newsInitialized) initNewsPage();
                 updateSavedPageData();
+                initTrackerPage();
             }, 800);
         });
     } else {
@@ -1846,6 +1952,7 @@
         setTimeout(function() {
             if (!newsInitialized) initNewsPage();
             updateSavedPageData();
+            initTrackerPage();
         }, 800);
     }
 
@@ -1856,6 +1963,7 @@
             addPanel();
             if (!newsInitialized) initNewsPage();
             updateSavedPageData();
+            initTrackerPage();
         }
         if (++attempts > 20) clearInterval(interval);
     }, 250);
