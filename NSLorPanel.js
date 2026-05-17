@@ -1446,6 +1446,7 @@
         }
 
         var rows = table.querySelectorAll('tbody tr');
+        var newCache = {};
 
         rows.forEach(function(row) {
             if (row.querySelector('th')) return;
@@ -1457,8 +1458,10 @@
 
             var cleanUrl = topicLink.href.replace(/[?&]lastmod=\d+/g, '');
             var currentCount = parseInt(cells[3].textContent.trim()) || 0;
-            var oldCount = oldCache[cleanUrl] || 0;
+            var oldCount = oldCache[cleanUrl] || 0; // Из СТАРОГО кэша
             var diff = currentCount - oldCount;
+
+            newCache[cleanUrl] = currentCount;
 
             var existingCol = row.querySelector('.lor-new-comments-col');
             if (existingCol) existingCol.remove();
@@ -1470,7 +1473,7 @@
             if (oldCount === 0) {
                 td.textContent = '—';
                 td.style.color = '#888';
-                td.title = 'Нет данных (откройте модальное окно трекера через ПКМ)';
+                td.title = 'Первый заход (не с чем сравнивать)';
             } else if (diff > 0) {
                 td.textContent = '+' + diff;
                 td.style.color = '#4CAF50';
@@ -1490,6 +1493,8 @@
 
             row.appendChild(td);
         });
+
+        saveTrackerCache(newCache);
 
         if (hasChanges && allButtons['tracker']) {
             allButtons['tracker'].style.background = '#4CAF50';
@@ -1865,11 +1870,12 @@
             }, 5000);
         }
 
-        // Обработчик скролла для автосохранения позиции
         window.addEventListener('scroll', function() {
             clearTimeout(scrollTimer);
             scrollTimer = setTimeout(saveScrollPosition, 2000);
         });
+
+        initTrackerPage();
     }
 
     document.addEventListener('click', function(e) {
@@ -1927,7 +1933,7 @@
 
     function initTrackerPage() {
         if (isTrackerPage()) {
-            setTimeout(updateTrackerTable, 500);
+            updateTrackerTable();
         }
     }
 
@@ -1935,7 +1941,6 @@
         pageLoadTime = Date.now();
         setTimeout(scrollToLastMod, 1000);
         setTimeout(updateSavedPageData, 1500);
-        setTimeout(initTrackerPage, 800);
     });
 
     if (document.readyState === 'loading') {
@@ -1944,7 +1949,6 @@
             setTimeout(function() {
                 if (!newsInitialized) initNewsPage();
                 updateSavedPageData();
-                initTrackerPage();
             }, 800);
         });
     } else {
@@ -1952,7 +1956,6 @@
         setTimeout(function() {
             if (!newsInitialized) initNewsPage();
             updateSavedPageData();
-            initTrackerPage();
         }, 800);
     }
 
@@ -1963,7 +1966,6 @@
             addPanel();
             if (!newsInitialized) initNewsPage();
             updateSavedPageData();
-            initTrackerPage();
         }
         if (++attempts > 20) clearInterval(interval);
     }, 250);
