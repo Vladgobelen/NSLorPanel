@@ -20,6 +20,7 @@
     var loadedIds = {};
     var panelContainer = null;
     var settingsBtn = null;
+    var addCustomBtn = null;
     var allButtons = {};
     var currentModal = null;
     var scrollTimer = null;
@@ -43,7 +44,9 @@
                 mention: true,
                 blacklist: true,
                 down: true
-            }
+            },
+            customButtons: [],
+            buttonOrder: ['up', 'forum', 'tracker', 'notifications', 'saved', 'myComment', 'mention', 'blacklist', 'down']
         };
     }
 
@@ -54,12 +57,22 @@
                 var defaults = getDefaultSettings();
                 if (!saved.general) saved.general = defaults.general;
                 if (!saved.buttons) saved.buttons = defaults.buttons;
+                if (!saved.customButtons) saved.customButtons = [];
+                if (!saved.buttonOrder) saved.buttonOrder = defaults.buttonOrder.slice();
                 if (saved.general.showBorder === undefined) saved.general.showBorder = defaults.general.showBorder;
                 if (!saved.general.scale || saved.general.scale < 30 || saved.general.scale > 200) saved.general.scale = defaults.general.scale;
                 if (!saved.general.modalScale || saved.general.modalScale < 30 || saved.general.modalScale > 200) saved.general.modalScale = defaults.general.modalScale;
                 for (var key in defaults.buttons) {
                     if (saved.buttons[key] === undefined) saved.buttons[key] = defaults.buttons[key];
                 }
+                var orderChanged = false;
+                defaults.buttonOrder.forEach(function(k) {
+                    if (saved.buttonOrder.indexOf(k) === -1) {
+                        saved.buttonOrder.push(k);
+                        orderChanged = true;
+                    }
+                });
+                if (orderChanged) saveSettings(saved);
                 return saved;
             }
         } catch(e) {}
@@ -178,11 +191,6 @@
         var url = window.location.href;
         var cleanUrl = url.replace(/[?&](lastmod|page)=\d+/g, '');
         return cleanUrl;
-    }
-
-    function isTopicPage() {
-        return window.location.href.match(/\/(news|forum|tracker)\/.*\/comments/) !== null ||
-               window.location.href.match(/\/news\/.*\/page\d+/) !== null;
     }
 
     function showBlacklistModal() {
@@ -404,7 +412,7 @@
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:' + (isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)') + ';z-index:100000;display:flex;align-items:center;justify-content:center;';
 
         var modal = document.createElement('div');
-        modal.style.cssText = 'background:' + (isDark ? '#0a0a14' : '#ffffff') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';padding:' + Math.round(24 * modalScale) + 'px;border-radius:' + Math.round(8 * modalScale) + 'px;width:' + Math.round(460 * modalScale) + 'px;color:' + (isDark ? '#ccc' : '#333') + ';font-family:Arial,sans-serif;font-size:' + Math.round(14 * modalScale) + 'px;box-shadow:0 0 30px rgba(0,0,0,' + (isDark ? '0.8' : '0.2') + ');';
+        modal.style.cssText = 'background:' + (isDark ? '#0a0a14' : '#ffffff') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';padding:' + Math.round(24 * modalScale) + 'px;border-radius:' + Math.round(8 * modalScale) + 'px;width:' + Math.round(520 * modalScale) + 'px;color:' + (isDark ? '#ccc' : '#333') + ';font-family:Arial,sans-serif;font-size:' + Math.round(14 * modalScale) + 'px;box-shadow:0 0 30px rgba(0,0,0,' + (isDark ? '0.8' : '0.2') + ');max-height:90vh;display:flex;flex-direction:column;';
 
         var title = document.createElement('div');
         title.style.cssText = 'font-size:' + Math.round(18 * modalScale) + 'px;font-weight:bold;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';';
@@ -436,7 +444,7 @@
 
         var content = document.createElement('div');
         content.id = 'lor-settings-tab-content';
-        content.style.cssText = 'min-height:200px;max-height:60vh;overflow-y:auto;';
+        content.style.cssText = 'flex:1;overflow-y:auto;min-height:200px;max-height:60vh;';
         modal.appendChild(content);
 
         var footer = document.createElement('div');
@@ -550,28 +558,104 @@
                 down: '▼ Вниз'
             };
 
-            for (var key in btnNames) {
+            var allButtonIds = settings.buttonOrder.slice();
+
+            for (var key in settings.buttons) {
+                if (allButtonIds.indexOf(key) === -1) {
+                    allButtonIds.push(key);
+                }
+            }
+
+            settings.customButtons.forEach(function(cb) {
+                if (allButtonIds.indexOf(cb.id) === -1) {
+                    allButtonIds.push(cb.id);
+                }
+            });
+
+            for (var name in btnNames) {
+                if (allButtonIds.indexOf(name) === -1) {
+                    allButtonIds.push(name);
+                }
+            }
+
+            allButtonIds.forEach(function(btnId) {
+                if (btnId === 'profile') return;
+
+                var isCustom = btnId.startsWith('custom_');
+                var customBtn = null;
+                if (isCustom) {
+                    customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; });
+                    if (!customBtn) return;
+                } else if (!btnNames[btnId]) {
+                    return;
+                }
+
+                var isEnabled = settings.buttons[btnId] !== false; // По умолчанию true, если не указано иное
+
                 var div = document.createElement('div');
-                div.style.cssText = 'margin-bottom:10px;';
+                div.style.cssText = 'margin-bottom:12px;display:flex;align-items:center;gap:8px;';
 
                 var label = document.createElement('label');
-                label.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+                label.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;';
 
                 var cb = document.createElement('input');
                 cb.type = 'checkbox';
                 cb.className = 'lor-setting-btn';
-                cb.setAttribute('data-key', key);
-                cb.checked = settings.buttons[key];
+                cb.setAttribute('data-key', btnId);
+                cb.checked = isEnabled;
                 cb.style.cssText = 'width:16px;height:16px;';
                 label.appendChild(cb);
 
                 var span = document.createElement('span');
-                span.textContent = btnNames[key];
+                if (isCustom && customBtn) {
+                    span.textContent = customBtn.icon + ' ' + customBtn.title;
+                } else {
+                    span.textContent = btnNames[btnId] || btnId;
+                }
+                if (!isEnabled) {
+                    span.style.opacity = '0.5';
+                    span.style.textDecoration = 'line-through';
+                }
                 label.appendChild(span);
 
                 div.appendChild(label);
+
+                var actionsDiv = document.createElement('div');
+                actionsDiv.style.cssText = 'display:flex;gap:4px;';
+
+                var upBtn = document.createElement('button');
+                upBtn.textContent = '^';
+                upBtn.title = 'Поднять выше';
+                upBtn.style.cssText = 'padding:2px 8px;background:' + (isDark ? '#1a2a3a' : '#e0e0e0') + ';color:' + (isDark ? '#aaa' : '#666') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';border-radius:3px;cursor:pointer;font-size:' + Math.round(12 * modalScale) + 'px;line-height:1;';
+                upBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    moveButtonUp(btnId, settings);
+                    saveSettings(settings);
+                    renderButtonsTab();
+                };
+                actionsDiv.appendChild(upBtn);
+
+                if (isCustom) {
+                    var delBtn = document.createElement('button');
+                    delBtn.textContent = '-';
+                    delBtn.title = 'Удалить кнопку';
+                    delBtn.style.cssText = 'padding:2px 8px;background:#5a1a1a;color:#ddd;border:1px solid #8a2a2a;border-radius:3px;cursor:pointer;font-size:' + Math.round(12 * modalScale) + 'px;line-height:1;';
+                    delBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        if (confirm('Удалить кнопку "' + customBtn.title + '"?')) {
+                            settings.customButtons = settings.customButtons.filter(function(cb) { return cb.id !== btnId; });
+                            settings.buttonOrder = settings.buttonOrder.filter(function(id) { return id !== btnId; });
+                            if (settings.buttons.hasOwnProperty(btnId)) delete settings.buttons[btnId];
+                            saveSettings(settings);
+                            renderButtonsTab();
+                        }
+                    };
+                    actionsDiv.appendChild(delBtn);
+                }
+
+                div.appendChild(actionsDiv);
                 content.appendChild(div);
-            }
+            });
         }
 
         function renderHelpTab() {
@@ -639,9 +723,16 @@
                              'из чёрного списка автоматически скрываются.'
                 },
                 {
+                    title: '➕ Пользовательские кнопки',
+                    content: 'Вы можете добавить свои кнопки с произвольными ссылками. ' +
+                             'Нажмите ПКМ на кнопку профиля, затем на "+" и введите URL, название и выберите иконку. ' +
+                             'Кнопка появится на панели. В настройках можно изменить порядок кнопок ' +
+                             'или удалить пользовательские.'
+                },
+                {
                     title: '👤 Кнопка "Профиль"',
                     content: '<b>ЛКМ:</b> Переход в ваш профиль.<br>' +
-                             '<b>ПКМ:</b> Показывает кнопку настроек (⚙).'
+                             '<b>ПКМ:</b> Показывает кнопку настроек (⚙) и кнопку добавления (+).'
                 },
                 {
                     title: '⚙ Настройки',
@@ -650,7 +741,9 @@
                              '• Включить/отключить отображение рамки панели<br>' +
                              '• Настроить масштаб панели (30-200%)<br>' +
                              '• Настроить масштаб модальных окон (30-200%)<br>' +
-                             '• Выбрать, какие кнопки отображать на панели'
+                             '• Выбрать, какие кнопки отображать на панели<br>' +
+                             '• Изменить порядок кнопок (кнопка ^)<br>' +
+                             '• Удалить пользовательские кнопки (кнопка -)'
                 },
                 {
                     title: '📰 Бесконечная лента новостей',
@@ -692,8 +785,48 @@
 
             var footerHelp = document.createElement('div');
             footerHelp.style.cssText = 'margin-top:' + Math.round(20 * modalScale) + 'px;padding-top:' + Math.round(12 * modalScale) + 'px;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;';
-            footerHelp.textContent = 'NSLorPanel v1.2 • Все данные хранятся в localStorage вашего браузера';
+            footerHelp.textContent = 'NSLorPanel v1.3 • Все данные хранятся в localStorage вашего браузера';
             content.appendChild(footerHelp);
+        }
+
+        function getOrderedButtons(settings) {
+            var order = settings.buttonOrder || [];
+            var result = [];
+
+            order.forEach(function(id) {
+                if (result.indexOf(id) === -1) {
+                    result.push(id);
+                }
+            });
+
+            for (var key in settings.buttons) {
+                if (settings.buttons[key] && result.indexOf(key) === -1) {
+                    result.push(key);
+                }
+            }
+
+            settings.customButtons.forEach(function(cb) {
+                if (settings.buttons[cb.id] && result.indexOf(cb.id) === -1) {
+                    result.push(cb.id);
+                }
+            });
+
+            return result;
+        }
+
+        function moveButtonUp(btnId, settings) {
+            var order = settings.buttonOrder || [];
+            var idx = order.indexOf(btnId);
+            if (idx > 0) {
+                var temp = order[idx - 1];
+                if (temp !== 'profile') {
+                    order[idx - 1] = btnId;
+                    order[idx] = temp;
+                }
+            } else if (idx === -1) {
+                order.unshift(btnId);
+            }
+            settings.buttonOrder = order;
         }
 
         renderGeneralTab();
@@ -758,7 +891,8 @@
             if (currentTab === 'buttons' || document.querySelector('.lor-setting-btn')) {
                 var btnChecks = document.querySelectorAll('.lor-setting-btn');
                 btnChecks.forEach(function(cb) {
-                    settings.buttons[cb.getAttribute('data-key')] = cb.checked;
+                    var key = cb.getAttribute('data-key');
+                    settings.buttons[key] = cb.checked;
                 });
             }
 
@@ -776,24 +910,107 @@
         };
     }
 
-    function hideSettingsButton() {
+    function showAddCustomButtonModal() {
+        if (document.getElementById('lor-add-custom-overlay')) return;
+        var isDark = isDarkTheme();
+        var settings = getSettings();
+        var modalScale = settings.general.modalScale / 100;
+
+        var icons = ['🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '⚫', '⚪', '🟤', '🔶', '🔷', '🔸', '🔹', '🟥', '🟧', '🟨', '🟩', '🟦', '🟪', '⬛', '⬜', '🟫', '❤️', '💙', '💚', '🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '🇭', '🇮', '🇯', '🇰', '🇱', '🇲', '🇳', '🇴', '🇵', '🇶', '🇷', '🇸', '🇹', '🇺', '🇻', '🇼', '🇽', '🇾', '🇿'];
+
+        var overlay = document.createElement('div');
+        overlay.id = 'lor-add-custom-overlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100001;display:flex;align-items:center;justify-content:center;';
+
+        var modal = document.createElement('div');
+        modal.style.cssText = 'background:' + (isDark ? '#0a0a14' : '#ffffff') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';padding:' + Math.round(24 * modalScale) + 'px;border-radius:' + Math.round(8 * modalScale) + 'px;width:' + Math.round(450 * modalScale) + 'px;color:' + (isDark ? '#ccc' : '#333') + ';font-family:Arial,sans-serif;font-size:' + Math.round(14 * modalScale) + 'px;box-shadow:0 0 20px rgba(0,0,0,' + (isDark ? '0.8' : '0.2') + ');';
+
+        modal.innerHTML = '<div style="font-size:' + Math.round(16 * modalScale) + 'px;font-weight:bold;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';">Добавить кнопку</div>' +
+            '<div style="margin-bottom:12px;">' +
+            '<label style="display:block;margin-bottom:4px;font-size:' + Math.round(13 * modalScale) + 'px;">Ссылка (URL):</label>' +
+            '<input type="text" id="lor-custom-url" placeholder="https://example.com" style="width:100%;padding:8px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;box-sizing:border-box;">' +
+            '</div>' +
+            '<div style="margin-bottom:12px;">' +
+            '<label style="display:block;margin-bottom:4px;font-size:' + Math.round(13 * modalScale) + 'px;">Название:</label>' +
+            '<input type="text" id="lor-custom-title" placeholder="Моя кнопка" style="width:100%;padding:8px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;box-sizing:border-box;">' +
+            '</div>' +
+            '<div style="margin-bottom:16px;">' +
+            '<label style="display:block;margin-bottom:4px;font-size:' + Math.round(13 * modalScale) + 'px;">Иконка:</label>' +
+            '<select id="lor-custom-icon" style="width:100%;padding:8px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(18 * modalScale) + 'px;box-sizing:border-box;">' +
+            icons.map(function(icon) { return '<option value="' + icon + '">' + icon + '</option>'; }).join('') +
+            '</select>' +
+            '</div>' +
+            '<div style="text-align:right;">' +
+            '<button id="lor-custom-add" style="padding:8px 20px;background:#0a3d6b;color:#ddd;border:1px solid #1a5a9a;border-radius:4px;cursor:pointer;font-size:' + Math.round(13 * modalScale) + 'px;margin-right:8px;">Добавить</button>' +
+            '<button id="lor-custom-cancel" style="padding:8px 20px;background:' + (isDark ? '#2a2a3a' : '#e0e0e0') + ';color:' + (isDark ? '#aaa' : '#666') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;cursor:pointer;font-size:' + Math.round(13 * modalScale) + 'px;">Отмена</button>' +
+            '</div>';
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        function addCustomButton() {
+            var url = document.getElementById('lor-custom-url').value.trim();
+            var title = document.getElementById('lor-custom-title').value.trim();
+            var icon = document.getElementById('lor-custom-icon').value;
+
+            if (!url) { alert('Введите URL'); return; }
+            if (!title) title = url;
+
+            var settings = getSettings();
+            var customId = 'custom_' + Date.now();
+            settings.customButtons.push({
+                id: customId,
+                url: url,
+                title: title,
+                icon: icon
+            });
+            settings.buttons[customId] = true;
+            if (settings.buttonOrder.indexOf(customId) === -1) {
+                settings.buttonOrder.push(customId);
+            }
+            saveSettings(settings);
+            overlay.remove();
+            rebuildPanel();
+        }
+
+        document.getElementById('lor-custom-add').onclick = addCustomButton;
+        document.getElementById('lor-custom-cancel').onclick = function() { overlay.remove(); };
+        document.getElementById('lor-custom-url').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') addCustomButton();
+        });
+        document.getElementById('lor-custom-title').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') addCustomButton();
+        });
+
+        overlay.onclick = function(e) {
+            if (e.target === overlay) overlay.remove();
+        };
+    }
+
+    function hideExtraButtons() {
         if (settingsBtn) {
             settingsBtn.style.opacity = '0';
             settingsBtn.style.pointerEvents = 'none';
         }
+        if (addCustomBtn) {
+            addCustomBtn.style.opacity = '0';
+            addCustomBtn.style.pointerEvents = 'none';
+        }
     }
 
-    function showSettingsButton(profileBtn) {
+    function showExtraButtons(profileBtn) {
+        var colors = getThemeColors();
+        var settings = getSettings();
+        var scale = settings.general.scale / 100;
+        var size = Math.round(40 * scale);
+        var fontSize = Math.round(20 * scale);
+
+        // Кнопка настроек
         if (!settingsBtn) {
             settingsBtn = document.createElement('div');
             settingsBtn.textContent = '⚙';
             settingsBtn.title = 'Настройки';
-            var colors = getThemeColors();
-            var settings = getSettings();
-            var scale = settings.general.scale / 100;
-            var size = Math.round(40 * scale);
-            var fontSize = Math.round(20 * scale);
-            settingsBtn.style.cssText = 'position:absolute;right:calc(100% + 10px);top:50%;transform:translateY(-50%);width:' + size + 'px;height:' + size + 'px;background:' + colors.btnBg + ';color:' + colors.btnColor + ';border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:' + fontSize + 'px;z-index:10001;transition:opacity 0.2s;';
+            settingsBtn.style.cssText = 'position:absolute;right:calc(100% + 10px);top:20%;transform:translateY(-50%);width:' + size + 'px;height:' + size + 'px;background:' + colors.btnBg + ';color:' + colors.btnColor + ';border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:' + fontSize + 'px;z-index:10001;transition:opacity 0.2s;';
             settingsBtn.onmouseenter = function() {
                 this.style.background = colors.btnBgHover;
             };
@@ -804,13 +1021,37 @@
                 e.stopPropagation();
                 e.preventDefault();
                 showSettingsModal();
-                hideSettingsButton();
+                hideExtraButtons();
             };
             profileBtn.style.position = 'relative';
             profileBtn.appendChild(settingsBtn);
         }
+
+        // Кнопка добавления
+        if (!addCustomBtn) {
+            addCustomBtn = document.createElement('div');
+            addCustomBtn.textContent = '+';
+            addCustomBtn.title = 'Добавить кнопку';
+            addCustomBtn.style.cssText = 'position:absolute;right:calc(100% + 10px);top:100%;transform:translateY(-50%);width:' + size + 'px;height:' + size + 'px;background:' + colors.btnBg + ';color:' + colors.btnColor + ';border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:' + fontSize + 'px;z-index:10001;transition:opacity 0.2s;';
+            addCustomBtn.onmouseenter = function() {
+                this.style.background = colors.btnBgHover;
+            };
+            addCustomBtn.onmouseleave = function() {
+                this.style.background = colors.btnBg;
+            };
+            addCustomBtn.onclick = function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                showAddCustomButtonModal();
+                hideExtraButtons();
+            };
+            profileBtn.appendChild(addCustomBtn);
+        }
+
         settingsBtn.style.opacity = '1';
         settingsBtn.style.pointerEvents = 'auto';
+        addCustomBtn.style.opacity = '1';
+        addCustomBtn.style.pointerEvents = 'auto';
     }
 
     function createButton(text, title, callback, marginBottom) {
@@ -1169,7 +1410,6 @@
                     var newCount = topic.messageCount;
                     var diff = newCount - oldCount;
 
-                    // Сохраняем в новый кэш (не перезаписываем старый пока не отрисовали)
                     newCache[cleanUrl] = newCount;
 
                     if (diff > 0 && oldCount > 0) {
@@ -1518,13 +1758,11 @@
             currentPageSaved = true;
             var savedPosition = savedPages[foundIndex].scrollPosition;
 
-            // Восстанавливаем позицию скролла при первом заходе
             if (!sessionStorage.getItem('scroll_restored_' + pageId) && savedPosition > 0) {
                 setTimeout(function() {
                     window.scrollTo({ top: savedPosition, behavior: 'smooth' });
                     sessionStorage.setItem('scroll_restored_' + pageId, 'true');
 
-                    // Обновляем количество комментариев и позицию после восстановления
                     var currentCommentCount = getCommentCount();
                     var currentScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
                     savedPages[foundIndex].commentCount = currentCommentCount;
@@ -1533,7 +1771,6 @@
                     saveSavedPages(savedPages);
                 }, 1500);
             } else if (sessionStorage.getItem('scroll_restored_' + pageId)) {
-                // Если уже восстанавливали, просто обновляем данные
                 var currentCommentCount = getCommentCount();
                 var currentScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
                 savedPages[foundIndex].commentCount = currentCommentCount;
@@ -1560,7 +1797,6 @@
         var savedBtn = allButtons['saved'];
 
         if (foundIndex !== -1) {
-            // Обновляем существующую
             savedPages[foundIndex].commentCount = currentCommentCount;
             savedPages[foundIndex].scrollPosition = currentScrollPosition;
             savedPages[foundIndex].lastChecked = new Date().toISOString();
@@ -1577,10 +1813,8 @@
                 }, 1500);
             }
 
-            // Сбрасываем флаг восстановления
             sessionStorage.removeItem('scroll_restored_' + pageId);
         } else {
-            // Добавляем новую
             savedPages.push({
                 url: pageId,
                 title: title,
@@ -1760,6 +1994,7 @@
             panelContainer.remove();
             panelContainer = null;
             settingsBtn = null;
+            addCustomBtn = null;
             allButtons = {};
         }
         addPanel();
@@ -1779,50 +2014,65 @@
         panelContainer.style.cssText = 'position:fixed !important;top:50% !important;transform:translateY(-50%) !important;z-index:9999 !important;display:flex !important;flex-direction:column !important;gap:' + gap + 'px !important;right:' + (scrollbarWidth + 20) + 'px !important;' +
             (settings.general.showBorder ? 'border:1px solid ' + colors.borderColor + ';border-radius:12px;padding:' + padding + 'px;' : '');
 
-        var profileBtn = createButton('👤', 'Профиль', function(e) {
+        var profileBtn = createButton('👤', 'Профиль (ПКМ - настройки и добавление)', function(e) {
             location.href = getProfileUrl();
         }, true);
         profileBtn.addEventListener('contextmenu', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            showSettingsButton(profileBtn);
+            showExtraButtons(profileBtn);
         });
         panelContainer.appendChild(profileBtn);
         allButtons['profile'] = profileBtn;
 
-        var buttonDefs = [
-            { key: 'up', text: '▲', title: 'Наверх', action: function() { window.scrollTo({ top: 0, behavior: 'smooth' }); } },
-            { key: 'forum', text: '📋', title: 'Форум (ПКМ - разделы)', action: function(e) {
+        var buttonDefs = {
+            'up': { text: '▲', title: 'Наверх', action: function() { window.scrollTo({ top: 0, behavior: 'smooth' }); } },
+            'forum': { text: '📋', title: 'Форум (ПКМ - разделы)', action: function(e) {
                 if (e && e.button === 0) location.href = 'https://www.linux.org.ru/forum/';
             }},
-            { key: 'tracker', text: '☰', title: 'Трекер (ПКМ - темы)', action: function(e) {
+            'tracker': { text: '☰', title: 'Трекер (ПКМ - темы)', action: function(e) {
                 if (e && e.button === 0) location.href = 'https://www.linux.org.ru/tracker/';
             }},
-            { key: 'notifications', text: '🔔', title: 'Уведомления (ПКМ - список)', action: function(e) {
+            'notifications': { text: '🔔', title: 'Уведомления (ПКМ - список)', action: function(e) {
                 if (e && e.button === 0) location.href = 'https://www.linux.org.ru/notifications';
             }},
-            { key: 'saved', text: '💾', title: 'Сохраненные (ПКМ - сохранить страницу)', action: function(e) {
+            'saved': { text: '💾', title: 'Сохраненные (ПКМ - сохранить страницу)', action: function(e) {
                 if (e && e.button === 0) showSavedPagesModal();
             }},
-            { key: 'myComment', text: '💬', title: 'К моему последнему сообщению', action: goToMyLastComment },
-            { key: 'mention', text: '📢', title: 'К последнему упоминанию меня', action: goToLastMention },
-            { key: 'blacklist', text: '🚫', title: 'Чёрный список', action: showBlacklistModal },
-            { key: 'down', text: '▼', title: 'Вниз', action: function() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); } }
-        ];
+            'myComment': { text: '💬', title: 'К моему последнему сообщению', action: goToMyLastComment },
+            'mention': { text: '📢', title: 'К последнему упоминанию меня', action: goToLastMention },
+            'blacklist': { text: '🚫', title: 'Чёрный список', action: showBlacklistModal },
+            'down': { text: '▼', title: 'Вниз', action: function() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); } }
+        };
 
-        buttonDefs.forEach(function(def) {
-            if (settings.buttons[def.key]) {
+        var orderedButtons = getOrderedButtons(settings);
+
+        orderedButtons.forEach(function(btnId) {
+            if (btnId === 'profile') return;
+
+            var isCustom = btnId.startsWith('custom_');
+            if (isCustom) {
+                var customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; });
+                if (customBtn && settings.buttons[btnId]) {
+                    var btn = createButton(customBtn.icon, customBtn.title, function() {
+                        location.href = customBtn.url;
+                    }, false);
+                    panelContainer.appendChild(btn);
+                    allButtons[btnId] = btn;
+                }
+            } else if (buttonDefs[btnId] && settings.buttons[btnId]) {
+                var def = buttonDefs[btnId];
                 var btn = createButton(def.text, def.title, function(e) {
-                    if (def.key === 'forum' || def.key === 'tracker' || def.key === 'notifications') {
+                    if (btnId === 'forum' || btnId === 'tracker' || btnId === 'notifications') {
                         if (e && e.button === 0) def.action(e);
-                    } else if (def.key === 'saved') {
+                    } else if (btnId === 'saved') {
                         def.action(e);
                     } else {
                         def.action(e);
                     }
                 }, false);
 
-                if (def.key === 'forum') {
+                if (btnId === 'forum') {
                     btn.addEventListener('contextmenu', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
@@ -1830,7 +2080,7 @@
                     });
                 }
 
-                if (def.key === 'tracker') {
+                if (btnId === 'tracker') {
                     btn.addEventListener('contextmenu', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
@@ -1838,7 +2088,7 @@
                     });
                 }
 
-                if (def.key === 'notifications') {
+                if (btnId === 'notifications') {
                     btn.addEventListener('contextmenu', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
@@ -1846,7 +2096,7 @@
                     });
                 }
 
-                if (def.key === 'saved') {
+                if (btnId === 'saved') {
                     btn.addEventListener('contextmenu', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
@@ -1855,8 +2105,8 @@
                 }
 
                 panelContainer.appendChild(btn);
-                allButtons[def.key] = btn;
-                if (def.key === 'notifications') {
+                allButtons[btnId] = btn;
+                if (btnId === 'notifications') {
                     updateNotificationBadge(btn);
                 }
             }
@@ -1880,9 +2130,35 @@
         initTrackerPage();
     }
 
+    function getOrderedButtons(settings) {
+        var order = settings.buttonOrder || [];
+        var allBtns = Object.keys(settings.buttons).filter(function(k) { return settings.buttons[k]; });
+        var customIds = settings.customButtons.map(function(cb) { return cb.id; });
+        var result = [];
+
+        order.forEach(function(id) {
+            if ((settings.buttons[id] || customIds.indexOf(id) !== -1) && result.indexOf(id) === -1) {
+                result.push(id);
+            }
+        });
+
+        allBtns.forEach(function(id) {
+            if (result.indexOf(id) === -1) result.push(id);
+        });
+
+        customIds.forEach(function(id) {
+            if (result.indexOf(id) === -1) result.push(id);
+        });
+
+        return result;
+    }
+
     document.addEventListener('click', function(e) {
-        if (settingsBtn && !settingsBtn.contains(e.target)) {
-            hideSettingsButton();
+        var shouldHide = true;
+        if (settingsBtn && settingsBtn.contains(e.target)) shouldHide = false;
+        if (addCustomBtn && addCustomBtn.contains(e.target)) shouldHide = false;
+        if (shouldHide) {
+            hideExtraButtons();
         }
     });
 
