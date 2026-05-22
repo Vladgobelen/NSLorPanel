@@ -1519,11 +1519,15 @@
                 topics.forEach(function(topic) {
                     var row = document.createElement('div');
                     var cleanUrl = topic.url.replace(/[?&]lastmod=\d+/g, '');
-                    var oldCount = cache[cleanUrl] || 0;
+                    var cachedData = cache[cleanUrl];
+                    var oldCount = (cachedData && typeof cachedData === 'object') ? cachedData.count : (cachedData || 0);
                     var newCount = topic.messageCount;
                     var diff = newCount - oldCount;
 
-                    newCache[cleanUrl] = newCount;
+                    newCache[cleanUrl] = {
+                        count: newCount,
+                        date: Date.now()
+                    };
 
                     if (diff > 0 && oldCount > 0) {
                         hasChanges = true;
@@ -1788,6 +1792,8 @@
 
         var oldCache = getTrackerCache();
         var hasChanges = false;
+        var now = Date.now();
+        var oneDay = 24 * 60 * 60 * 1000;
 
         var headerRow = table.querySelector('thead tr');
         if (headerRow && !headerRow.querySelector('.lor-new-comments-col')) {
@@ -1801,6 +1807,7 @@
         var rows = table.querySelectorAll('tbody tr');
         var newCache = {};
 
+        // Сначала собираем текущие данные и сохраняем их
         rows.forEach(function(row) {
             if (row.querySelector('th')) return;
             var cells = row.querySelectorAll('td');
@@ -1812,11 +1819,38 @@
             var cleanUrl = topicLink.href.replace(/[?&]lastmod=\d+/g, '');
             var currentCount = parseInt(cells[3].textContent.trim()) || 0;
 
-            var wasInCache = oldCache.hasOwnProperty(cleanUrl);
-            var oldCount = wasInCache ? oldCache[cleanUrl] : 0;
-            var diff = currentCount - oldCount;
+            // Сохраняем в новый кэш с датой
+            newCache[cleanUrl] = {
+                count: currentCount,
+                date: now
+            };
+        });
 
-            newCache[cleanUrl] = currentCount;
+        // Теперь отображаем разницу, используя старый кэш
+        rows.forEach(function(row) {
+            if (row.querySelector('th')) return;
+            var cells = row.querySelectorAll('td');
+            if (cells.length < 4) return;
+
+            var topicLink = cells[1].querySelector('a');
+            if (!topicLink) return;
+
+            var cleanUrl = topicLink.href.replace(/[?&]lastmod=\d+/g, '');
+            var currentCount = parseInt(cells[3].textContent.trim()) || 0;
+
+            var cachedData = oldCache[cleanUrl];
+            var wasInCache = cachedData && typeof cachedData === 'object';
+            var oldCount = wasInCache ? cachedData.count : 0;
+            var cacheDate = wasInCache ? cachedData.date : 0;
+            var isExpired = (now - cacheDate) > oneDay;
+
+            // Если запись устарела — считаем что её нет
+            if (isExpired) {
+                wasInCache = false;
+                oldCount = 0;
+            }
+
+            var diff = currentCount - oldCount;
 
             var existingCol = row.querySelector('.lor-new-comments-col');
             if (existingCol) existingCol.remove();
@@ -1849,6 +1883,7 @@
             row.appendChild(td);
         });
 
+        // Сохраняем новый кэш
         saveTrackerCache(newCache);
 
         if (hasChanges && allButtons['tracker']) {
