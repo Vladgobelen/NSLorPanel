@@ -2138,6 +2138,7 @@
         }
         if (mobileExpandedContainer) {
             mobileExpandedContainer.style.display = 'flex';
+            mobileExpandedContainer.scrollTop = 0;
         }
     }
 
@@ -2202,10 +2203,15 @@
         }, false, settings.general.mobileScale);
         mobileCollapsedContainer.appendChild(downBtn);
 
-        // Развёрнутая панель — все кнопки
+        // Развёрнутая панель — все кнопки с прокруткой
         mobileExpandedContainer = document.createElement('div');
         mobileExpandedContainer.className = 'lor-mobile-expanded';
-        mobileExpandedContainer.style.cssText = 'position:fixed !important;z-index:9999 !important;display:none !important;flex-direction:column !important;gap:' + gap + 'px !important;';
+        mobileExpandedContainer.style.cssText = 'position:fixed !important;z-index:9999 !important;display:none !important;flex-direction:column !important;gap:' + gap + 'px !important;' +
+            'max-height:' + Math.round(window.innerHeight * 0.7) + 'px !important;' +
+            'overflow-y:auto !important;' +
+            'scrollbar-width:thin !important;' +
+            'scrollbar-color:' + (isDarkTheme() ? '#444 #1a1a2e' : '#ccc #f0f0f0') + ' !important;' +
+            '-webkit-overflow-scrolling:touch !important;';
 
         if (settings.general.showBorder) {
             mobileExpandedContainer.style.border = '1px solid ' + colors.borderColor;
