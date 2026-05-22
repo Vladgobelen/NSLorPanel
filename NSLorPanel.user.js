@@ -2154,7 +2154,6 @@
             mobileCollapsedContainer.style.padding = padding + 'px';
         }
 
-        // Кнопка вверх
         var upBtn = createButton('▲', 'Наверх (долгое нажатие - настройки)', function() {
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }, false, settings.general.mobileScale);
@@ -2166,7 +2165,6 @@
         });
         mobileCollapsedContainer.appendChild(upBtn);
 
-        // Кнопка уведомлений
         var notifBtn = createButton('🔔', 'Уведомления (долгое нажатие - список)', function(e) {
             if (e && e.button === 0) location.href = 'https://www.linux.org.ru/notifications';
         }, false, settings.general.mobileScale);
@@ -2180,7 +2178,6 @@
             updateNotificationBadge(notifBtn);
         }
 
-        // Кнопка вниз
         var downBtn = createButton('▼', 'Вниз (долгое нажатие - настройки)', function() {
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
         }, false, settings.general.mobileScale);
@@ -2192,7 +2189,6 @@
         });
         mobileCollapsedContainer.appendChild(downBtn);
 
-        // Развёрнутая панель
         mobileExpandedContainer = document.createElement('div');
         mobileExpandedContainer.className = 'lor-mobile-expanded';
         mobileExpandedContainer.style.cssText = 'position:fixed !important;z-index:9999 !important;display:none !important;flex-direction:column !important;gap:' + gap + 'px !important;' +
@@ -2208,7 +2204,6 @@
             mobileExpandedContainer.style.padding = padding + 'px';
         }
 
-        // Профиль
         var profileBtn = createButton('👤', 'Профиль (долгое нажатие - настройки)', function(e) {
             location.href = getProfileUrl();
         }, true, settings.general.mobileScale);
@@ -2228,7 +2223,7 @@
             'saved': { text: '💾', title: 'Сохраненные (долгое нажатие - сохранить)', action: function(e) { if (e && e.button === 0) showSavedPagesModal(); }, longPressAction: 'saved' },
             'myComment': { text: '💬', title: 'К моему последнему сообщению', action: goToMyLastComment },
             'mention': { text: '📢', title: 'К последнему упоминанию меня', action: goToLastMention },
-            'blacklist': { text: '🚫', title: 'Чёрный список (долгое нажатие - добавить)', action: showBlacklistModal, longPressAction: 'blacklist' },
+            'blacklist': { text: '🚫', title: 'Чёрный список (долгое нажатие - добавить автора)', action: showBlacklistModal, longPressAction: 'blacklist' },
             'down': { text: '▼', title: 'Вниз (долгое нажатие - настройки)', action: function() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, showSettings: true }
         };
 
@@ -2259,7 +2254,6 @@
                     }
                 }, false, settings.general.mobileScale);
 
-                // ПКМ для всех кнопок в развёрнутой панели
                 btn.addEventListener('contextmenu', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -2383,12 +2377,10 @@
         panelContainer.style.cssText = 'position:fixed !important;top:50% !important;transform:translateY(-50%) !important;z-index:9999 !important;display:flex !important;flex-direction:column !important;gap:' + gap + 'px !important;right:' + (scrollbarWidth + 20) + 'px !important;' +
             (settings.general.showBorder ? 'border:1px solid ' + colors.borderColor + ';border-radius:12px;padding:' + padding + 'px;' : '');
 
-        // Очищаем ссылки
         settingsBtn = null;
         addCustomBtn = null;
         allButtons = {};
 
-        // Профиль
         var profileBtn = createButton('👤', 'Профиль (ПКМ - настройки и добавление)', function(e) {
             location.href = getProfileUrl();
         }, true, settings.general.scale);
@@ -2417,7 +2409,7 @@
             }},
             'myComment': { text: '💬', title: 'К моему последнему сообщению', action: goToMyLastComment },
             'mention': { text: '📢', title: 'К последнему упоминанию меня', action: goToLastMention },
-            'blacklist': { text: '🚫', title: 'Чёрный список (ПКМ - добавить автора новости)', action: showBlacklistModal },
+            'blacklist': { text: '🚫', title: 'Чёрный список (ПКМ - добавить автора)', action: showBlacklistModal },
             'down': { text: '▼', title: 'Вниз (ПКМ - настройки)', action: function() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, showSettings: true }
         };
 
@@ -2448,7 +2440,6 @@
                     }
                 }, false, settings.general.scale);
 
-                // Для кнопок up и down показываем настройки
                 if (def.showSettings) {
                     btn.style.position = 'relative';
                     btn.addEventListener('contextmenu', function(e) {
@@ -2494,11 +2485,7 @@
                     btn.addEventListener('contextmenu', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
-                        if (isNewsArticlePage()) {
-                            confirmAndAddToBlacklist();
-                        } else {
-                            showBlacklistModal();
-                        }
+                        confirmAndAddToBlacklist();
                     });
                 }
 
