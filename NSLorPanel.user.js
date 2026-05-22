@@ -9,7 +9,7 @@
 
 (function() {
     'use strict';
-
+    var trackerTableUpdated = false;
     var currentOffset = 0;
     var PAGE_SIZE = 20;
     var isLoading = false;
@@ -1784,119 +1784,6 @@
             });
     }
 
-    function updateTrackerTable() {
-        var table = document.querySelector('table.message-table');
-        if (!table) return;
-
-        if (!location.href.match(/\/tracker\/?$/)) return;
-
-        var oldCache = getTrackerCache();
-        var hasChanges = false;
-        var now = Date.now();
-        var oneDay = 24 * 60 * 60 * 1000;
-
-        var headerRow = table.querySelector('thead tr');
-        if (headerRow && !headerRow.querySelector('.lor-new-comments-col')) {
-            var th = document.createElement('th');
-            th.className = 'lor-new-comments-col';
-            th.textContent = 'Новых';
-            th.style.cssText = 'text-align:center;color:#4CAF50;';
-            headerRow.appendChild(th);
-        }
-
-        var rows = table.querySelectorAll('tbody tr');
-        var newCache = {};
-
-        // Сначала собираем текущие данные и сохраняем их
-        rows.forEach(function(row) {
-            if (row.querySelector('th')) return;
-            var cells = row.querySelectorAll('td');
-            if (cells.length < 4) return;
-
-            var topicLink = cells[1].querySelector('a');
-            if (!topicLink) return;
-
-            var cleanUrl = topicLink.href.replace(/[?&]lastmod=\d+/g, '');
-            var currentCount = parseInt(cells[3].textContent.trim()) || 0;
-
-            // Сохраняем в новый кэш с датой
-            newCache[cleanUrl] = {
-                count: currentCount,
-                date: now
-            };
-        });
-
-        // Теперь отображаем разницу, используя старый кэш
-        rows.forEach(function(row) {
-            if (row.querySelector('th')) return;
-            var cells = row.querySelectorAll('td');
-            if (cells.length < 4) return;
-
-            var topicLink = cells[1].querySelector('a');
-            if (!topicLink) return;
-
-            var cleanUrl = topicLink.href.replace(/[?&]lastmod=\d+/g, '');
-            var currentCount = parseInt(cells[3].textContent.trim()) || 0;
-
-            var cachedData = oldCache[cleanUrl];
-            var wasInCache = cachedData && typeof cachedData === 'object';
-            var oldCount = wasInCache ? cachedData.count : 0;
-            var cacheDate = wasInCache ? cachedData.date : 0;
-            var isExpired = (now - cacheDate) > oneDay;
-
-            // Если запись устарела — считаем что её нет
-            if (isExpired) {
-                wasInCache = false;
-                oldCount = 0;
-            }
-
-            var diff = currentCount - oldCount;
-
-            var existingCol = row.querySelector('.lor-new-comments-col');
-            if (existingCol) existingCol.remove();
-
-            var td = document.createElement('td');
-            td.className = 'lor-new-comments-col';
-            td.style.cssText = 'text-align:center;font-weight:bold;';
-
-            if (!wasInCache) {
-                td.textContent = '—';
-                td.style.color = '#888';
-                td.title = 'Новая тема (не с чем сравнивать)';
-            } else if (diff > 0) {
-                td.textContent = '+' + diff;
-                td.style.color = '#4CAF50';
-                td.style.background = 'rgba(76,175,80,0.15)';
-                td.style.borderRadius = '3px';
-                td.title = 'Было: ' + oldCount + ', стало: ' + currentCount;
-                hasChanges = true;
-            } else if (diff === 0) {
-                td.textContent = '0';
-                td.style.color = '#888';
-                td.title = 'Было: ' + oldCount + ', стало: ' + currentCount + ' (без изменений)';
-            } else {
-                td.textContent = diff;
-                td.style.color = '#ff6666';
-                td.title = 'Было: ' + oldCount + ', стало: ' + currentCount;
-            }
-
-            row.appendChild(td);
-        });
-
-        // Сохраняем новый кэш
-        saveTrackerCache(newCache);
-
-        if (hasChanges && allButtons['tracker']) {
-            allButtons['tracker'].style.background = '#4CAF50';
-            setTimeout(function() {
-                if (allButtons['tracker']) {
-                    var colors = getThemeColors();
-                    allButtons['tracker'].style.background = colors.btnBg;
-                }
-            }, 3000);
-        }
-    }
-
     function updateSavedPageData() {
         var pageId = getPageIdentifier();
         var savedPages = getSavedPages();
@@ -2621,9 +2508,124 @@
         window.addEventListener('scroll', onScroll);
     }
 
+
+    function updateTrackerTable() {
+        // Защита от повторного выполнения
+        if (trackerTableUpdated) return;
+        
+        var table = document.querySelector('table.message-table');
+        if (!table) return;
+
+        if (!location.href.match(/\/tracker\/?$/)) return;
+
+        var oldCache = getTrackerCache();
+        var hasChanges = false;
+        var now = Date.now();
+        var oneDay = 24 * 60 * 60 * 1000;
+
+        // Сначала чистим устаревшие записи (старше 24 часов)
+        var cleanedCache = {};
+        for (var url in oldCache) {
+            var cachedData = oldCache[url];
+            if (cachedData && typeof cachedData === 'object') {
+                var age = now - cachedData.date;
+                if (age <= oneDay) {
+                    cleanedCache[url] = cachedData;
+                }
+            }
+        }
+
+        var headerRow = table.querySelector('thead tr');
+        if (headerRow && !headerRow.querySelector('.lor-new-comments-col')) {
+            var th = document.createElement('th');
+            th.className = 'lor-new-comments-col';
+            th.textContent = 'Новых';
+            th.style.cssText = 'text-align:center;color:#4CAF50;';
+            headerRow.appendChild(th);
+        }
+
+        var rows = table.querySelectorAll('tbody tr');
+
+        // Отрисовываем колонку "Новых" и обновляем кэш
+        rows.forEach(function(row) {
+            if (row.querySelector('th')) return;
+            var cells = row.querySelectorAll('td');
+            if (cells.length < 4) return;
+
+            var topicLink = cells[1].querySelector('a');
+            if (!topicLink) return;
+
+            var cleanUrl = topicLink.href.replace(/[?&]lastmod=\d+/g, '');
+            var currentCount = parseInt(cells[3].textContent.trim()) || 0;
+
+            var cachedData = cleanedCache[cleanUrl];
+            var wasInCache = cachedData && typeof cachedData === 'object';
+            var oldCount = wasInCache ? cachedData.count : 0;
+
+            var diff = currentCount - oldCount;
+
+            var existingCol = row.querySelector('.lor-new-comments-col');
+            if (existingCol) existingCol.remove();
+
+            var td = document.createElement('td');
+            td.className = 'lor-new-comments-col';
+            td.style.cssText = 'text-align:center;font-weight:bold;';
+
+            if (!wasInCache) {
+                td.textContent = currentCount;
+                td.style.color = '#4a90d9';
+                td.title = 'Новая тема (всего сообщений: ' + currentCount + ')';
+            } else if (diff > 0) {
+                td.textContent = '+' + diff;
+                td.style.color = '#4CAF50';
+                td.style.background = 'rgba(76,175,80,0.15)';
+                td.style.borderRadius = '3px';
+                td.title = 'Было: ' + oldCount + ', стало: ' + currentCount;
+                hasChanges = true;
+            } else if (diff === 0) {
+                td.textContent = '0';
+                td.style.color = '#888';
+                td.title = 'Было: ' + oldCount + ', стало: ' + currentCount + ' (без изменений)';
+            } else {
+                td.textContent = diff;
+                td.style.color = '#ff6666';
+                td.title = 'Было: ' + oldCount + ', стало: ' + currentCount;
+            }
+
+            // Обновляем/добавляем запись в кэш
+            cleanedCache[cleanUrl] = {
+                count: currentCount,
+                date: now
+            };
+
+            row.appendChild(td);
+        });
+
+        // Сохраняем обновлённый кэш (дополненный, не перезаписанный)
+        saveTrackerCache(cleanedCache);
+        
+        // Помечаем, что таблица обновлена
+        trackerTableUpdated = true;
+
+        if (hasChanges && allButtons['tracker']) {
+            allButtons['tracker'].style.background = '#4CAF50';
+            setTimeout(function() {
+                if (allButtons['tracker']) {
+                    var colors = getThemeColors();
+                    allButtons['tracker'].style.background = colors.btnBg;
+                }
+            }, 3000);
+        }
+    }
+
     function initTrackerPage() {
-        if (isTrackerPage()) {
-            updateTrackerTable();
+        if (isTrackerPage() && !trackerTableUpdated) {
+            // Даем время DOM полностью загрузиться
+            setTimeout(function() {
+                if (document.querySelector('table.message-table tbody tr')) {
+                    updateTrackerTable();
+                }
+            }, 100);
         }
     }
 
