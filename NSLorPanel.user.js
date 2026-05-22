@@ -1126,16 +1126,16 @@
         btn.style.cssText = 'width:' + size + 'px;height:' + size + 'px;background:' + colors.btnBg + ';color:' + colors.btnColor + ';border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:' + fontSize + 'px;user-select:none;opacity:0.7;position:relative;' + (marginBottom ? 'margin-bottom:30px;' : '');
         btn.onmouseenter = function() { this.style.opacity = '1'; this.style.background = colors.btnBgHover; };
         btn.onmouseleave = function() { this.style.opacity = '0.7'; this.style.background = colors.btnBg; };
-        
+
         btn.ontouchstart = function(e) {
             this.style.opacity = '1';
             this.style.background = colors.btnBgHover;
-            
+
             var self = this;
             // Сохраняем координаты начала касания
             var startX = e.touches[0].clientX;
             var startY = e.touches[0].clientY;
-            
+
             // Запускаем таймер долгого нажатия
             self._longPressTimer = setTimeout(function() {
                 var event = new MouseEvent('contextmenu', {
@@ -1145,7 +1145,7 @@
                 });
                 self.dispatchEvent(event);
             }, 500);
-            
+
             // Глобальный обработчик движения для сброса таймера
             self._moveHandler = function(moveEvent) {
                 if (moveEvent.touches.length === 1) {
@@ -1158,7 +1158,7 @@
                 }
             };
             document.addEventListener('touchmove', self._moveHandler, { passive: true });
-            
+
             // Глобальный обработчик окончания касания для очистки
             self._endHandler = function() {
                 clearTimeout(self._longPressTimer);
@@ -1167,19 +1167,19 @@
             };
             document.addEventListener('touchend', self._endHandler, { once: true });
         };
-        
+
         btn.ontouchend = function() {
             this.style.opacity = '0.7';
             this.style.background = colors.btnBg;
             clearTimeout(this._longPressTimer);
         };
-        
+
         btn.ontouchcancel = function() {
             this.style.opacity = '0.7';
             this.style.background = colors.btnBg;
             clearTimeout(this._longPressTimer);
         };
-        
+
         btn.onclick = callback;
         return btn;
     }
@@ -2061,7 +2061,7 @@
 
         if (mobileCollapsedContainer) mobileCollapsedContainer.remove();
         if (mobileExpandedContainer) mobileExpandedContainer.remove();
-        
+
         settingsBtn = null;
         addCustomBtn = null;
         allButtons = {};
@@ -2224,7 +2224,7 @@
         // Всегда вертикально: справа, верхняя треть
         var rightOffset = scrollbarWidth + Math.round(window.innerWidth * 0.02);
         var topPos = Math.round(window.innerHeight * 0.15);
-        
+
         mobileCollapsedContainer.style.top = topPos + 'px';
         mobileCollapsedContainer.style.right = rightOffset + 'px';
         mobileCollapsedContainer.style.left = 'auto';
@@ -2508,14 +2508,11 @@
         window.addEventListener('scroll', onScroll);
     }
 
-
     function updateTrackerTable() {
-        // Защита от повторного выполнения
         if (trackerTableUpdated) return;
-        
+
         var table = document.querySelector('table.message-table');
         if (!table) return;
-
         if (!location.href.match(/\/tracker\/?$/)) return;
 
         var oldCache = getTrackerCache();
@@ -2523,7 +2520,7 @@
         var now = Date.now();
         var oneDay = 24 * 60 * 60 * 1000;
 
-        // Сначала чистим устаревшие записи (старше 24 часов)
+        // Чистим устаревшие записи
         var cleanedCache = {};
         for (var url in oldCache) {
             var cachedData = oldCache[url];
@@ -2546,7 +2543,7 @@
 
         var rows = table.querySelectorAll('tbody tr');
 
-        // Отрисовываем колонку "Новых" и обновляем кэш
+        // ПЕРВЫЙ ПРОХОД: только отрисовка разницы
         rows.forEach(function(row) {
             if (row.querySelector('th')) return;
             var cells = row.querySelectorAll('td');
@@ -2592,19 +2589,30 @@
                 td.title = 'Было: ' + oldCount + ', стало: ' + currentCount;
             }
 
-            // Обновляем/добавляем запись в кэш
+            row.appendChild(td);
+        });
+
+        // ВТОРОЙ ПРОХОД: только обновление кэша (ПОСЛЕ отрисовки)
+        rows.forEach(function(row) {
+            if (row.querySelector('th')) return;
+            var cells = row.querySelectorAll('td');
+            if (cells.length < 4) return;
+
+            var topicLink = cells[1].querySelector('a');
+            if (!topicLink) return;
+
+            var cleanUrl = topicLink.href.replace(/[?&]lastmod=\d+/g, '');
+            var currentCount = parseInt(cells[3].textContent.trim()) || 0;
+
             cleanedCache[cleanUrl] = {
                 count: currentCount,
                 date: now
             };
-
-            row.appendChild(td);
         });
 
-        // Сохраняем обновлённый кэш (дополненный, не перезаписанный)
+        // Сохраняем обновлённый кэш
         saveTrackerCache(cleanedCache);
-        
-        // Помечаем, что таблица обновлена
+
         trackerTableUpdated = true;
 
         if (hasChanges && allButtons['tracker']) {
@@ -2682,13 +2690,13 @@
             touchStartY = e.touches[0].clientY;
             touchStartX = e.touches[0].clientX;
             touchMoved = false;
-            
+
             // Проверяем, начался ли тач на панели
             var target = e.target;
             var isInPanel = false;
             if (mobileCollapsedContainer && mobileCollapsedContainer.contains(target)) isInPanel = true;
             if (mobileExpandedContainer && mobileExpandedContainer.contains(target)) isInPanel = true;
-            
+
             // Сохраняем флаг в touchstart
             e.target._touchInPanel = isInPanel;
         }
@@ -2698,11 +2706,11 @@
         if (e.touches.length === 1) {
             var deltaY = e.touches[0].clientY - touchStartY;
             var deltaX = e.touches[0].clientX - touchStartX;
-            
+
             if (Math.abs(deltaY) > 10 || Math.abs(deltaX) > 10) {
                 touchMoved = true;
             }
-            
+
             // Если тач начался на панели и это вертикальный свайп - блокируем скролл
             if (e.target._touchInPanel && Math.abs(deltaY) > Math.abs(deltaX)) {
                 e.preventDefault();
