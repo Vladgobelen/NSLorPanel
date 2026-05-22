@@ -27,12 +27,24 @@
     var currentPageSaved = false;
     var pageLoadTime = Date.now();
 
+    // Мобильные переменные
+    var isMobilePanelExpanded = false;
+    var touchStartY = 0;
+    var touchStartX = 0;
+    var touchMoved = false;
+    var SWIPE_THRESHOLD = 40;
+    var mobileCollapsedContainer = null;
+    var mobileExpandedContainer = null;
+
     function getDefaultSettings() {
         return {
             general: {
                 showBorder: false,
                 scale: 100,
-                modalScale: 100
+                modalScale: 100,
+                mobileView: false,
+                mobileScale: 120,
+                orientation: 'vertical'
             },
             buttons: {
                 up: true,
@@ -60,8 +72,11 @@
                 if (!saved.customButtons) saved.customButtons = [];
                 if (!saved.buttonOrder) saved.buttonOrder = defaults.buttonOrder.slice();
                 if (saved.general.showBorder === undefined) saved.general.showBorder = defaults.general.showBorder;
+                if (saved.general.mobileView === undefined) saved.general.mobileView = defaults.general.mobileView;
                 if (!saved.general.scale || saved.general.scale < 30 || saved.general.scale > 200) saved.general.scale = defaults.general.scale;
                 if (!saved.general.modalScale || saved.general.modalScale < 30 || saved.general.modalScale > 200) saved.general.modalScale = defaults.general.modalScale;
+                if (!saved.general.mobileScale || saved.general.mobileScale < 30 || saved.general.mobileScale > 300) saved.general.mobileScale = defaults.general.mobileScale;
+                if (!saved.general.orientation) saved.general.orientation = defaults.general.orientation;
                 for (var key in defaults.buttons) {
                     if (saved.buttons[key] === undefined) saved.buttons[key] = defaults.buttons[key];
                 }
@@ -122,6 +137,24 @@
         return null;
     }
 
+    function getCurrentNewsAuthor() {
+        // Ищем автора текущей открытой новости
+        var sign = document.querySelector('.sign a[href*="/people/"]');
+        if (sign) return sign.textContent.trim();
+
+        // Может быть в заголовке
+        var authorEl = document.querySelector('a[href*="/people/"][href*="/profile"]');
+        if (authorEl) return authorEl.textContent.trim();
+
+        return null;
+    }
+
+    function isNewsArticlePage() {
+        // Страница конкретной новости: /news/XXXXX/
+        var path = location.pathname;
+        return /^\/news\/[^\/]+\/$/.test(path);
+    }
+
     function goToMyLastComment() {
         var nick = getMyNick();
         if (!nick) { alert('Не удалось определить ник.'); return; }
@@ -176,7 +209,7 @@
         var count = parseInt(raw.replace(/[^0-9]/g, '')) || 0;
         btn.textContent = count > 0 ? count : '🔔';
         var settings = getSettings();
-        var scale = settings.general.scale / 100;
+        var scale = (settings.general.mobileView ? settings.general.mobileScale : settings.general.scale) / 100;
         var fontSize = Math.round(24 * scale);
         btn.style.fontSize = count > 0 ? Math.round(28 * scale) + 'px' : fontSize + 'px';
         btn.style.fontWeight = 'bold';
@@ -191,6 +224,25 @@
         var url = window.location.href;
         var cleanUrl = url.replace(/[?&](lastmod|page)=\d+/g, '');
         return cleanUrl;
+    }
+
+    function confirmAndAddToBlacklist() {
+        var author = getCurrentNewsAuthor();
+        if (!author) {
+            alert('Не удалось определить автора новости.');
+            return;
+        }
+
+        if (confirm('Добавить автора "' + author + '" в чёрный список?')) {
+            var blacklist = getBlacklist();
+            if (blacklist.indexOf(author) === -1) {
+                blacklist.push(author);
+                localStorage.setItem('lor_blacklist', JSON.stringify(blacklist));
+                alert('Автор "' + author + '" добавлен в чёрный список.');
+            } else {
+                alert('Автор "' + author + '" уже в чёрном списке.');
+            }
+        }
     }
 
     function showBlacklistModal() {
@@ -471,40 +523,76 @@
         function renderGeneralTab() {
             content.innerHTML = '';
 
+            // Мобильный вид
+            var mobileDiv = document.createElement('div');
+            mobileDiv.style.cssText = 'margin-bottom:16px;';
+            var mobileLabel = document.createElement('label');
+            mobileLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var mobileCheck = document.createElement('input');
+            mobileCheck.type = 'checkbox';
+            mobileCheck.id = 'lor-setting-mobile-view';
+            mobileCheck.checked = settings.general.mobileView;
+            mobileCheck.style.cssText = 'width:16px;height:16px;';
+            mobileLabel.appendChild(mobileCheck);
+            var mobileText = document.createElement('span');
+            mobileText.textContent = 'Мобильный вид (свайп-панель)';
+            mobileLabel.appendChild(mobileText);
+            mobileDiv.appendChild(mobileLabel);
+            content.appendChild(mobileDiv);
+
+            // Ориентация
+            var orientDiv = document.createElement('div');
+            orientDiv.style.cssText = 'margin-bottom:16px;';
+            var orientLabel = document.createElement('label');
+            orientLabel.style.cssText = 'display:block;margin-bottom:8px;';
+            var orientText = document.createElement('span');
+            orientText.textContent = 'Ориентация панели:';
+            orientLabel.appendChild(orientText);
+            var orientSelect = document.createElement('select');
+            orientSelect.id = 'lor-setting-orientation';
+            orientSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
+            var optV = document.createElement('option');
+            optV.value = 'vertical';
+            optV.textContent = 'Вертикально (справа)';
+            if (settings.general.orientation === 'vertical') optV.selected = true;
+            orientSelect.appendChild(optV);
+            var optH = document.createElement('option');
+            optH.value = 'horizontal';
+            optH.textContent = 'Горизонтально (сверху)';
+            if (settings.general.orientation === 'horizontal') optH.selected = true;
+            orientSelect.appendChild(optH);
+            orientLabel.appendChild(orientSelect);
+            orientDiv.appendChild(orientLabel);
+            content.appendChild(orientDiv);
+
+            // Рамка
             var borderDiv = document.createElement('div');
             borderDiv.style.cssText = 'margin-bottom:16px;';
-
             var borderLabel = document.createElement('label');
             borderLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
-
             var borderCheck = document.createElement('input');
             borderCheck.type = 'checkbox';
             borderCheck.id = 'lor-setting-border';
             borderCheck.checked = settings.general.showBorder;
             borderCheck.style.cssText = 'width:16px;height:16px;';
             borderLabel.appendChild(borderCheck);
-
             var borderText = document.createElement('span');
             borderText.textContent = 'Отображать рамку панели';
             borderLabel.appendChild(borderText);
-
             borderDiv.appendChild(borderLabel);
             content.appendChild(borderDiv);
 
+            // Масштаб панели
             var scaleDiv = document.createElement('div');
             scaleDiv.style.cssText = 'margin-bottom:16px;';
-
             var scaleLabel = document.createElement('label');
             scaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
-
             var scaleText = document.createElement('span');
             scaleText.textContent = 'Масштаб панели:';
             scaleLabel.appendChild(scaleText);
-
             var scaleSelect = document.createElement('select');
             scaleSelect.id = 'lor-setting-scale';
             scaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
-
             for (var s = 30; s <= 200; s += 10) {
                 var opt = document.createElement('option');
                 opt.value = s;
@@ -512,33 +600,50 @@
                 if (settings.general.scale === s) opt.selected = true;
                 scaleSelect.appendChild(opt);
             }
-
             scaleLabel.appendChild(scaleSelect);
             scaleDiv.appendChild(scaleLabel);
             content.appendChild(scaleDiv);
 
-            var modalScaleDiv = document.createElement('div');
-            modalScaleDiv.style.cssText = 'margin-bottom:16px;';
-
-            var modalScaleLabel = document.createElement('label');
-            modalScaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
-
-            var modalScaleText = document.createElement('span');
-            modalScaleText.textContent = 'Масштаб модальных окон:';
-            modalScaleLabel.appendChild(modalScaleText);
-
-            var modalScaleSelect = document.createElement('select');
-            modalScaleSelect.id = 'lor-setting-modal-scale';
-            modalScaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
-
-            for (var ms = 30; ms <= 200; ms += 10) {
+            // Масштаб мобильной панели
+            var mobScaleDiv = document.createElement('div');
+            mobScaleDiv.style.cssText = 'margin-bottom:16px;';
+            var mobScaleLabel = document.createElement('label');
+            mobScaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
+            var mobScaleText = document.createElement('span');
+            mobScaleText.textContent = 'Масштаб в мобильном виде:';
+            mobScaleLabel.appendChild(mobScaleText);
+            var mobScaleSelect = document.createElement('select');
+            mobScaleSelect.id = 'lor-setting-mobile-scale';
+            mobScaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
+            for (var ms = 30; ms <= 300; ms += 10) {
                 var mopt = document.createElement('option');
                 mopt.value = ms;
                 mopt.textContent = ms + '%';
-                if (settings.general.modalScale === ms) mopt.selected = true;
-                modalScaleSelect.appendChild(mopt);
+                if (settings.general.mobileScale === ms) mopt.selected = true;
+                mobScaleSelect.appendChild(mopt);
             }
+            mobScaleLabel.appendChild(mobScaleSelect);
+            mobScaleDiv.appendChild(mobScaleLabel);
+            content.appendChild(mobScaleDiv);
 
+            // Масштаб модальных окон
+            var modalScaleDiv = document.createElement('div');
+            modalScaleDiv.style.cssText = 'margin-bottom:16px;';
+            var modalScaleLabel = document.createElement('label');
+            modalScaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
+            var modalScaleText = document.createElement('span');
+            modalScaleText.textContent = 'Масштаб модальных окон:';
+            modalScaleLabel.appendChild(modalScaleText);
+            var modalScaleSelect = document.createElement('select');
+            modalScaleSelect.id = 'lor-setting-modal-scale';
+            modalScaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
+            for (var mms = 30; mms <= 200; mms += 10) {
+                var mmopt = document.createElement('option');
+                mmopt.value = mms;
+                mmopt.textContent = mms + '%';
+                if (settings.general.modalScale === mms) mmopt.selected = true;
+                modalScaleSelect.appendChild(mmopt);
+            }
             modalScaleLabel.appendChild(modalScaleSelect);
             modalScaleDiv.appendChild(modalScaleLabel);
             content.appendChild(modalScaleDiv);
@@ -590,7 +695,7 @@
                     return;
                 }
 
-                var isEnabled = settings.buttons[btnId] !== false; // По умолчанию true, если не указано иное
+                var isEnabled = settings.buttons[btnId] !== false;
 
                 var div = document.createElement('div');
                 div.style.cssText = 'margin-bottom:12px;display:flex;align-items:center;gap:8px;';
@@ -663,6 +768,13 @@
 
             var helpSections = [
                 {
+                    title: '📱 Мобильный вид',
+                    content: 'При включении мобильного вида панель сворачивается в три кнопки: ▲ 🔔 ▼. ' +
+                             '<b>Свайп вниз</b> по области панели — разворачивает все кнопки. ' +
+                             '<b>Свайп вверх</b> по любой иконке — сворачивает обратно. ' +
+                             'В мобильном виде работает отдельный масштаб.'
+                },
+                {
                     title: '📋 Кнопка "Форум"',
                     content: '<b>ЛКМ:</b> Переход на главную страницу форума.<br>' +
                              '<b>ПКМ:</b> Открывает модальное окно со списком разделов форума. ' +
@@ -720,7 +832,8 @@
                     title: '🚫 Кнопка "Чёрный список"',
                     content: '<b>ЛКМ:</b> Открывает модальное окно управления чёрным списком авторов. ' +
                              'Можно добавлять и удалять ники. Все новости и мини-новости от авторов ' +
-                             'из чёрного списка автоматически скрываются.'
+                             'из чёрного списка автоматически скрываются.<br>' +
+                             '<b>ПКМ (на странице новости):</b> Автоматически добавляет автора текущей новости в чёрный список.'
                 },
                 {
                     title: '➕ Пользовательские кнопки',
@@ -738,8 +851,11 @@
                     title: '⚙ Настройки',
                     content: 'Кнопка настроек появляется при ПКМ на кнопку профиля. ' +
                              'В настройках можно:<br>' +
+                             '• Включить мобильный вид со свайп-панелью<br>' +
+                             '• Выбрать ориентацию панели (вертикально/горизонтально)<br>' +
                              '• Включить/отключить отображение рамки панели<br>' +
                              '• Настроить масштаб панели (30-200%)<br>' +
+                             '• Настроить масштаб мобильной панели (30-300%)<br>' +
                              '• Настроить масштаб модальных окон (30-200%)<br>' +
                              '• Выбрать, какие кнопки отображать на панели<br>' +
                              '• Изменить порядок кнопок (кнопка ^)<br>' +
@@ -785,33 +901,8 @@
 
             var footerHelp = document.createElement('div');
             footerHelp.style.cssText = 'margin-top:' + Math.round(20 * modalScale) + 'px;padding-top:' + Math.round(12 * modalScale) + 'px;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;';
-            footerHelp.textContent = 'NSLorPanel v1.3 • Все данные хранятся в localStorage вашего браузера';
+            footerHelp.textContent = 'NSLorPanel v2.0 • Все данные хранятся в localStorage вашего браузера';
             content.appendChild(footerHelp);
-        }
-
-        function getOrderedButtons(settings) {
-            var order = settings.buttonOrder || [];
-            var result = [];
-
-            order.forEach(function(id) {
-                if (result.indexOf(id) === -1) {
-                    result.push(id);
-                }
-            });
-
-            for (var key in settings.buttons) {
-                if (settings.buttons[key] && result.indexOf(key) === -1) {
-                    result.push(key);
-                }
-            }
-
-            settings.customButtons.forEach(function(cb) {
-                if (settings.buttons[cb.id] && result.indexOf(cb.id) === -1) {
-                    result.push(cb.id);
-                }
-            });
-
-            return result;
         }
 
         function moveButtonUp(btnId, settings) {
@@ -874,18 +965,27 @@
         };
 
         saveBtn.onclick = function() {
+            var mobileViewCheck = document.getElementById('lor-setting-mobile-view');
+            var orientSelect = document.getElementById('lor-setting-orientation');
             var borderCheck = document.getElementById('lor-setting-border');
             var scaleSelect = document.getElementById('lor-setting-scale');
+            var mobileScaleSelect = document.getElementById('lor-setting-mobile-scale');
             var modalScaleSelect = document.getElementById('lor-setting-modal-scale');
 
+            if (mobileViewCheck) settings.general.mobileView = mobileViewCheck.checked;
+            if (orientSelect) settings.general.orientation = orientSelect.value;
             if (borderCheck) settings.general.showBorder = borderCheck.checked;
             if (scaleSelect) {
                 var val = parseInt(scaleSelect.value);
                 if (val >= 30 && val <= 200) settings.general.scale = val;
             }
+            if (mobileScaleSelect) {
+                var mval = parseInt(mobileScaleSelect.value);
+                if (mval >= 30 && mval <= 300) settings.general.mobileScale = mval;
+            }
             if (modalScaleSelect) {
-                var mval = parseInt(modalScaleSelect.value);
-                if (mval >= 30 && mval <= 200) settings.general.modalScale = mval;
+                var mmval = parseInt(modalScaleSelect.value);
+                if (mmval >= 30 && mmval <= 200) settings.general.modalScale = mmval;
             }
 
             if (currentTab === 'buttons' || document.querySelector('.lor-setting-btn')) {
@@ -1005,7 +1105,6 @@
         var size = Math.round(40 * scale);
         var fontSize = Math.round(20 * scale);
 
-        // Кнопка настроек
         if (!settingsBtn) {
             settingsBtn = document.createElement('div');
             settingsBtn.textContent = '⚙';
@@ -1027,7 +1126,6 @@
             profileBtn.appendChild(settingsBtn);
         }
 
-        // Кнопка добавления
         if (!addCustomBtn) {
             addCustomBtn = document.createElement('div');
             addCustomBtn.textContent = '+';
@@ -1054,10 +1152,10 @@
         addCustomBtn.style.pointerEvents = 'auto';
     }
 
-    function createButton(text, title, callback, marginBottom) {
+    function createButton(text, title, callback, marginBottom, forceScale) {
         var settings = getSettings();
         var colors = getThemeColors();
-        var scale = settings.general.scale / 100;
+        var scale = (forceScale || (settings.general.mobileView ? settings.general.mobileScale : settings.general.scale)) / 100;
         var size = Math.round(54 * scale);
         var fontSize = Math.round(24 * scale);
 
@@ -1067,6 +1165,8 @@
         btn.style.cssText = 'width:' + size + 'px;height:' + size + 'px;background:' + colors.btnBg + ';color:' + colors.btnColor + ';border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:' + fontSize + 'px;user-select:none;opacity:0.7;position:relative;' + (marginBottom ? 'margin-bottom:30px;' : '');
         btn.onmouseenter = function() { this.style.opacity = '1'; this.style.background = colors.btnBgHover; };
         btn.onmouseleave = function() { this.style.opacity = '0.7'; this.style.background = colors.btnBg; };
+        btn.ontouchstart = function() { this.style.opacity = '1'; this.style.background = colors.btnBgHover; };
+        btn.ontouchend = function() { this.style.opacity = '0.7'; this.style.background = colors.btnBg; };
         btn.onclick = callback;
         return btn;
     }
@@ -1989,42 +2089,142 @@
         };
     }
 
-    function rebuildPanel() {
-        if (panelContainer) {
-            panelContainer.remove();
-            panelContainer = null;
-            settingsBtn = null;
-            addCustomBtn = null;
-            allButtons = {};
-        }
-        addPanel();
+    // === МОБИЛЬНАЯ ПАНЕЛЬ ===
+
+    function setupMobileTouchEvents(container) {
+        container.addEventListener('touchstart', function(e) {
+            if (e.touches.length === 1) {
+                touchStartY = e.touches[0].clientY;
+                touchStartX = e.touches[0].clientX;
+                touchMoved = false;
+            }
+        }, { passive: false });
+
+        container.addEventListener('touchmove', function(e) {
+            if (e.touches.length === 1) {
+                var deltaY = e.touches[0].clientY - touchStartY;
+                var deltaX = e.touches[0].clientX - touchStartX;
+                if (Math.abs(deltaY) > 10 || Math.abs(deltaX) > 10) {
+                    touchMoved = true;
+                }
+                // Блокируем скролл страницы внутри панели
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        container.addEventListener('touchend', function(e) {
+            if (!touchMoved) return;
+
+            var deltaY = (e.changedTouches[0] ? e.changedTouches[0].clientY : touchStartY) - touchStartY;
+
+            if (deltaY > SWIPE_THRESHOLD) {
+                // Свайп вниз — разворачиваем
+                expandMobilePanel();
+            } else if (deltaY < -SWIPE_THRESHOLD) {
+                // Свайп вверх — сворачиваем
+                collapseMobilePanel();
+            }
+
+            touchMoved = false;
+        });
     }
 
-    function addPanel() {
-        if (document.querySelector('.lor-panel-container')) return;
+    function expandMobilePanel() {
+        if (isMobilePanelExpanded) return;
+        isMobilePanelExpanded = true;
+
+        if (mobileCollapsedContainer) {
+            mobileCollapsedContainer.style.display = 'none';
+        }
+        if (mobileExpandedContainer) {
+            mobileExpandedContainer.style.display = 'flex';
+        }
+    }
+
+    function collapseMobilePanel() {
+        if (!isMobilePanelExpanded) return;
+        isMobilePanelExpanded = false;
+
+        if (mobileExpandedContainer) {
+            mobileExpandedContainer.style.display = 'none';
+        }
+        if (mobileCollapsedContainer) {
+            mobileCollapsedContainer.style.display = 'flex';
+        }
+    }
+
+    function createMobilePanel() {
         var settings = getSettings();
         var colors = getThemeColors();
-        var scale = settings.general.scale / 100;
+        var mobileScale = settings.general.mobileScale / 100;
         var scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-        var gap = Math.round(8 * scale);
-        var padding = Math.round(8 * scale);
+        var gap = Math.round(8 * mobileScale);
+        var padding = Math.round(8 * mobileScale);
 
-        panelContainer = document.createElement('div');
-        panelContainer.className = 'lor-panel-container';
-        panelContainer.style.cssText = 'position:fixed !important;top:50% !important;transform:translateY(-50%) !important;z-index:9999 !important;display:flex !important;flex-direction:column !important;gap:' + gap + 'px !important;right:' + (scrollbarWidth + 20) + 'px !important;' +
-            (settings.general.showBorder ? 'border:1px solid ' + colors.borderColor + ';border-radius:12px;padding:' + padding + 'px;' : '');
+        // Удаляем старые
+        if (mobileCollapsedContainer) mobileCollapsedContainer.remove();
+        if (mobileExpandedContainer) mobileExpandedContainer.remove();
 
+        // Свёрнутая панель — 3 кнопки: ▲ 🔔 ▼
+        mobileCollapsedContainer = document.createElement('div');
+        mobileCollapsedContainer.className = 'lor-mobile-collapsed';
+        mobileCollapsedContainer.style.cssText = 'position:fixed !important;z-index:9999 !important;display:flex !important;flex-direction:column !important;gap:' + gap + 'px !important;';
+
+        if (settings.general.showBorder) {
+            mobileCollapsedContainer.style.border = '1px solid ' + colors.borderColor;
+            mobileCollapsedContainer.style.borderRadius = '12px';
+            mobileCollapsedContainer.style.padding = padding + 'px';
+        }
+
+        // Кнопка вверх
+        var upBtn = createButton('▲', 'Наверх', function() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }, false, settings.general.mobileScale);
+        mobileCollapsedContainer.appendChild(upBtn);
+
+        // Кнопка уведомлений
+        var notifBtn = createButton('🔔', 'Уведомления (ПКМ - список)', function(e) {
+            if (e && e.button === 0) location.href = 'https://www.linux.org.ru/notifications';
+        }, false, settings.general.mobileScale);
+        notifBtn.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            showNotificationsModal();
+        });
+        mobileCollapsedContainer.appendChild(notifBtn);
+        if (settings.buttons['notifications']) {
+            updateNotificationBadge(notifBtn);
+        }
+
+        // Кнопка вниз
+        var downBtn = createButton('▼', 'Вниз', function() {
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }, false, settings.general.mobileScale);
+        mobileCollapsedContainer.appendChild(downBtn);
+
+        // Развёрнутая панель — все кнопки
+        mobileExpandedContainer = document.createElement('div');
+        mobileExpandedContainer.className = 'lor-mobile-expanded';
+        mobileExpandedContainer.style.cssText = 'position:fixed !important;z-index:9999 !important;display:none !important;flex-direction:column !important;gap:' + gap + 'px !important;';
+
+        if (settings.general.showBorder) {
+            mobileExpandedContainer.style.border = '1px solid ' + colors.borderColor;
+            mobileExpandedContainer.style.borderRadius = '12px';
+            mobileExpandedContainer.style.padding = padding + 'px';
+        }
+
+        // Профиль
         var profileBtn = createButton('👤', 'Профиль (ПКМ - настройки и добавление)', function(e) {
             location.href = getProfileUrl();
-        }, true);
+        }, true, settings.general.mobileScale);
         profileBtn.addEventListener('contextmenu', function(e) {
             e.preventDefault();
             e.stopPropagation();
             showExtraButtons(profileBtn);
         });
-        panelContainer.appendChild(profileBtn);
-        allButtons['profile'] = profileBtn;
+        mobileExpandedContainer.appendChild(profileBtn);
 
+        // Все кнопки из buttonDefs
         var buttonDefs = {
             'up': { text: '▲', title: 'Наверх', action: function() { window.scrollTo({ top: 0, behavior: 'smooth' }); } },
             'forum': { text: '📋', title: 'Форум (ПКМ - разделы)', action: function(e) {
@@ -2041,7 +2241,7 @@
             }},
             'myComment': { text: '💬', title: 'К моему последнему сообщению', action: goToMyLastComment },
             'mention': { text: '📢', title: 'К последнему упоминанию меня', action: goToLastMention },
-            'blacklist': { text: '🚫', title: 'Чёрный список', action: showBlacklistModal },
+            'blacklist': { text: '🚫', title: 'Чёрный список (ПКМ - добавить автора новости)', action: showBlacklistModal },
             'down': { text: '▼', title: 'Вниз', action: function() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); } }
         };
 
@@ -2056,8 +2256,8 @@
                 if (customBtn && settings.buttons[btnId]) {
                     var btn = createButton(customBtn.icon, customBtn.title, function() {
                         location.href = customBtn.url;
-                    }, false);
-                    panelContainer.appendChild(btn);
+                    }, false, settings.general.mobileScale);
+                    mobileExpandedContainer.appendChild(btn);
                     allButtons[btnId] = btn;
                 }
             } else if (buttonDefs[btnId] && settings.buttons[btnId]) {
@@ -2070,7 +2270,7 @@
                     } else {
                         def.action(e);
                     }
-                }, false);
+                }, false, settings.general.mobileScale);
 
                 if (btnId === 'forum') {
                     btn.addEventListener('contextmenu', function(e) {
@@ -2104,6 +2304,248 @@
                     });
                 }
 
+                if (btnId === 'blacklist') {
+                    btn.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (isNewsArticlePage()) {
+                            confirmAndAddToBlacklist();
+                        } else {
+                            showBlacklistModal();
+                        }
+                    });
+                }
+
+                mobileExpandedContainer.appendChild(btn);
+                allButtons[btnId] = btn;
+                if (btnId === 'notifications') {
+                    updateNotificationBadge(btn);
+                }
+            }
+        });
+
+        // Позиционирование
+        positionMobilePanels();
+
+        // Touch-события
+        setupMobileTouchEvents(mobileCollapsedContainer);
+        setupMobileTouchEvents(mobileExpandedContainer);
+
+        document.body.appendChild(mobileCollapsedContainer);
+        document.body.appendChild(mobileExpandedContainer);
+
+        // Обновление бейджа уведомлений
+        if (settings.buttons['notifications'] && allButtons['notifications']) {
+            setInterval(function() {
+                if (allButtons['notifications']) {
+                    updateNotificationBadge(allButtons['notifications']);
+                }
+            }, 5000);
+        }
+    }
+
+    function positionMobilePanels() {
+        var settings = getSettings();
+        var scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+        if (!mobileCollapsedContainer || !mobileExpandedContainer) return;
+
+        if (settings.general.orientation === 'horizontal') {
+            // Горизонтально: сверху по центру
+            var topOffset = Math.round(window.innerHeight * 0.02);
+            mobileCollapsedContainer.style.top = topOffset + 'px';
+            mobileCollapsedContainer.style.left = '50%';
+            mobileCollapsedContainer.style.transform = 'translateX(-50%)';
+            mobileCollapsedContainer.style.right = 'auto';
+            mobileCollapsedContainer.style.flexDirection = 'row';
+
+            mobileExpandedContainer.style.top = topOffset + 'px';
+            mobileExpandedContainer.style.left = '50%';
+            mobileExpandedContainer.style.transform = 'translateX(-50%)';
+            mobileExpandedContainer.style.right = 'auto';
+            mobileExpandedContainer.style.flexDirection = 'row';
+        } else {
+            // Вертикально: справа, верхняя треть
+            var rightOffset = scrollbarWidth + Math.round(window.innerWidth * 0.02);
+            var topPos = Math.round(window.innerHeight * 0.15);
+            mobileCollapsedContainer.style.top = topPos + 'px';
+            mobileCollapsedContainer.style.right = rightOffset + 'px';
+            mobileCollapsedContainer.style.left = 'auto';
+            mobileCollapsedContainer.style.transform = 'none';
+            mobileCollapsedContainer.style.flexDirection = 'column';
+
+            mobileExpandedContainer.style.top = topPos + 'px';
+            mobileExpandedContainer.style.right = rightOffset + 'px';
+            mobileExpandedContainer.style.left = 'auto';
+            mobileExpandedContainer.style.transform = 'none';
+            mobileExpandedContainer.style.flexDirection = 'column';
+        }
+    }
+
+    function destroyMobilePanel() {
+        if (mobileCollapsedContainer) {
+            mobileCollapsedContainer.remove();
+            mobileCollapsedContainer = null;
+        }
+        if (mobileExpandedContainer) {
+            mobileExpandedContainer.remove();
+            mobileExpandedContainer = null;
+        }
+        isMobilePanelExpanded = false;
+    }
+
+    // === ДЕСКОПНАЯ ПАНЕЛЬ ===
+
+    function destroyDesktopPanel() {
+        if (panelContainer) {
+            panelContainer.remove();
+            panelContainer = null;
+        }
+        settingsBtn = null;
+        addCustomBtn = null;
+        allButtons = {};
+    }
+
+    function getOrderedButtons(settings) {
+        var order = settings.buttonOrder || [];
+        var allBtns = Object.keys(settings.buttons).filter(function(k) { return settings.buttons[k]; });
+        var customIds = settings.customButtons.map(function(cb) { return cb.id; });
+        var result = [];
+
+        order.forEach(function(id) {
+            if ((settings.buttons[id] || customIds.indexOf(id) !== -1) && result.indexOf(id) === -1) {
+                result.push(id);
+            }
+        });
+
+        allBtns.forEach(function(id) {
+            if (result.indexOf(id) === -1) result.push(id);
+        });
+
+        customIds.forEach(function(id) {
+            if (result.indexOf(id) === -1) result.push(id);
+        });
+
+        return result;
+    }
+
+    function addDesktopPanel() {
+        if (document.querySelector('.lor-panel-container')) return;
+        var settings = getSettings();
+        var colors = getThemeColors();
+        var scale = settings.general.scale / 100;
+        var scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+        var gap = Math.round(8 * scale);
+        var padding = Math.round(8 * scale);
+
+        panelContainer = document.createElement('div');
+        panelContainer.className = 'lor-panel-container';
+        panelContainer.style.cssText = 'position:fixed !important;top:50% !important;transform:translateY(-50%) !important;z-index:9999 !important;display:flex !important;flex-direction:column !important;gap:' + gap + 'px !important;right:' + (scrollbarWidth + 20) + 'px !important;' +
+            (settings.general.showBorder ? 'border:1px solid ' + colors.borderColor + ';border-radius:12px;padding:' + padding + 'px;' : '');
+
+        // Профиль
+        var profileBtn = createButton('👤', 'Профиль (ПКМ - настройки и добавление)', function(e) {
+            location.href = getProfileUrl();
+        }, true, settings.general.scale);
+        profileBtn.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            showExtraButtons(profileBtn);
+        });
+        panelContainer.appendChild(profileBtn);
+        allButtons['profile'] = profileBtn;
+
+        var buttonDefs = {
+            'up': { text: '▲', title: 'Наверх', action: function() { window.scrollTo({ top: 0, behavior: 'smooth' }); } },
+            'forum': { text: '📋', title: 'Форум (ПКМ - разделы)', action: function(e) {
+                if (e && e.button === 0) location.href = 'https://www.linux.org.ru/forum/';
+            }},
+            'tracker': { text: '☰', title: 'Трекер (ПКМ - темы)', action: function(e) {
+                if (e && e.button === 0) location.href = 'https://www.linux.org.ru/tracker/';
+            }},
+            'notifications': { text: '🔔', title: 'Уведомления (ПКМ - список)', action: function(e) {
+                if (e && e.button === 0) location.href = 'https://www.linux.org.ru/notifications';
+            }},
+            'saved': { text: '💾', title: 'Сохраненные (ПКМ - сохранить страницу)', action: function(e) {
+                if (e && e.button === 0) showSavedPagesModal();
+            }},
+            'myComment': { text: '💬', title: 'К моему последнему сообщению', action: goToMyLastComment },
+            'mention': { text: '📢', title: 'К последнему упоминанию меня', action: goToLastMention },
+            'blacklist': { text: '🚫', title: 'Чёрный список (ПКМ - добавить автора новости)', action: showBlacklistModal },
+            'down': { text: '▼', title: 'Вниз', action: function() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); } }
+        };
+
+        var orderedButtons = getOrderedButtons(settings);
+
+        orderedButtons.forEach(function(btnId) {
+            if (btnId === 'profile') return;
+
+            var isCustom = btnId.startsWith('custom_');
+            if (isCustom) {
+                var customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; });
+                if (customBtn && settings.buttons[btnId]) {
+                    var btn = createButton(customBtn.icon, customBtn.title, function() {
+                        location.href = customBtn.url;
+                    }, false, settings.general.scale);
+                    panelContainer.appendChild(btn);
+                    allButtons[btnId] = btn;
+                }
+            } else if (buttonDefs[btnId] && settings.buttons[btnId]) {
+                var def = buttonDefs[btnId];
+                var btn = createButton(def.text, def.title, function(e) {
+                    if (btnId === 'forum' || btnId === 'tracker' || btnId === 'notifications') {
+                        if (e && e.button === 0) def.action(e);
+                    } else if (btnId === 'saved') {
+                        def.action(e);
+                    } else {
+                        def.action(e);
+                    }
+                }, false, settings.general.scale);
+
+                if (btnId === 'forum') {
+                    btn.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        showForumModal();
+                    });
+                }
+
+                if (btnId === 'tracker') {
+                    btn.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        showTrackerModal();
+                    });
+                }
+
+                if (btnId === 'notifications') {
+                    btn.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        showNotificationsModal();
+                    });
+                }
+
+                if (btnId === 'saved') {
+                    btn.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        addCurrentPageToSaved();
+                    });
+                }
+
+                if (btnId === 'blacklist') {
+                    btn.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (isNewsArticlePage()) {
+                            confirmAndAddToBlacklist();
+                        } else {
+                            showBlacklistModal();
+                        }
+                    });
+                }
+
                 panelContainer.appendChild(btn);
                 allButtons[btnId] = btn;
                 if (btnId === 'notifications') {
@@ -2130,28 +2572,20 @@
         initTrackerPage();
     }
 
-    function getOrderedButtons(settings) {
-        var order = settings.buttonOrder || [];
-        var allBtns = Object.keys(settings.buttons).filter(function(k) { return settings.buttons[k]; });
-        var customIds = settings.customButtons.map(function(cb) { return cb.id; });
-        var result = [];
+    function rebuildPanel() {
+        destroyDesktopPanel();
+        destroyMobilePanel();
 
-        order.forEach(function(id) {
-            if ((settings.buttons[id] || customIds.indexOf(id) !== -1) && result.indexOf(id) === -1) {
-                result.push(id);
-            }
-        });
+        var settings = getSettings();
 
-        allBtns.forEach(function(id) {
-            if (result.indexOf(id) === -1) result.push(id);
-        });
-
-        customIds.forEach(function(id) {
-            if (result.indexOf(id) === -1) result.push(id);
-        });
-
-        return result;
+        if (settings.general.mobileView) {
+            createMobilePanel();
+        } else {
+            addDesktopPanel();
+        }
     }
+
+    // === ОБЩИЕ ФУНКЦИИ ===
 
     document.addEventListener('click', function(e) {
         var shouldHide = true;
@@ -2221,16 +2655,32 @@
         setTimeout(updateSavedPageData, 1500);
     });
 
+    window.addEventListener('resize', function() {
+        var settings = getSettings();
+        if (settings.general.mobileView) {
+            positionMobilePanels();
+        }
+    });
+
+    window.addEventListener('orientationchange', function() {
+        setTimeout(function() {
+            var settings = getSettings();
+            if (settings.general.mobileView) {
+                positionMobilePanels();
+            }
+        }, 300);
+    });
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(addPanel, 500);
+            setTimeout(function() { rebuildPanel(); }, 500);
             setTimeout(function() {
                 if (!newsInitialized) initNewsPage();
                 updateSavedPageData();
             }, 800);
         });
     } else {
-        setTimeout(addPanel, 500);
+        setTimeout(function() { rebuildPanel(); }, 500);
         setTimeout(function() {
             if (!newsInitialized) initNewsPage();
             updateSavedPageData();
@@ -2241,7 +2691,7 @@
     var interval = setInterval(function() {
         if (document.body) {
             clearInterval(interval);
-            addPanel();
+            rebuildPanel();
             if (!newsInitialized) initNewsPage();
             updateSavedPageData();
         }
