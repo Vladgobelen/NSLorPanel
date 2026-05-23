@@ -173,6 +173,14 @@ function saveTrackerCache(d) { localStorage.setItem('lor_tracker_cache', JSON.st
 // ============================================================================
 // 5. УТИЛИТЫ DOM И СТРАНИЦЫ
 // ============================================================================
+function getProfilePageNick() {
+    if (!/\/people\/[^/]+\/profile/.test(location.href)) {
+        return null;
+    }
+    const txt = document.body.innerText;
+    const m = txt.match(/Nick:\s*([a-zA-Zа-яА-ЯёЁ0-9_-]+)/i);
+    return m ? m[1] : null;
+}
 
 function getMyNick() {
     let pl = document.querySelector('a[href*="/people/"][href*="/profile"]');
@@ -1269,14 +1277,41 @@ function addCurrentPageToSaved() {
 }
 
 function confirmAndAddToBlacklist() {
-    const author = getCurrentNewsAuthor(); if (!author) { alert('Не удалось определить автора.'); return; }
-    if (confirm('Добавить автора "' + author + '" в чёрный список?')) { const bl = getBlacklist(); if (bl.indexOf(author) === -1) { bl.push(author); saveBlacklistAndNotify(bl); alert('Автор "' + author + '" добавлен.'); } else { alert('Автор уже в списке.'); } }
+    const author = getProfilePageNick() || getCurrentNewsAuthor();
+
+    if (!author) {
+        alert('Не удалось определить автора.');
+        return;
+    }
+    if (confirm('Добавить автора "' + author + '" в чёрный список?')) {
+        const bl = getBlacklist();
+        if (bl.indexOf(author) === -1) {
+            bl.push(author);
+            saveBlacklistAndNotify(bl);
+            alert('Автор "' + author + '" добавлен.');
+        } else {
+            alert('Автор уже в списке.');
+        }
+    }
 }
 
 function confirmAndAddToTracked() {
-    const author = getCurrentNewsAuthor(); if (!author) { alert('Не удалось определить автора.'); return; }
-    const tr = getTrackedUsers(); if (tr[author]) { alert('Пользователь "' + author + '" уже отслеживается.'); return; }
-    if (confirm('Добавить пользователя "' + author + '" в список отслеживаемых?')) { tr[author] = { lastVisit: 'загрузка...', checked: 0 }; saveTrackedUsers(tr); alert('Пользователь "' + author + '" добавлен.'); }
+    const author = getProfilePageNick() || getCurrentNewsAuthor();
+
+    if (!author) {
+        alert('Не удалось определить автора.');
+        return;
+    }
+    const tr = getTrackedUsers();
+    if (tr[author]) {
+        alert('Пользователь "' + author + '" уже отслеживается.');
+        return;
+    }
+    if (confirm('Добавить пользователя "' + author + '" в список отслеживаемых?')) {
+        tr[author] = { lastVisit: 'загрузка...', checked: 0 };
+        saveTrackedUsers(tr);
+        alert('Пользователь "' + author + '" добавлен.');
+    }
 }
 
 function showExtraButtons(btn, pos) {
