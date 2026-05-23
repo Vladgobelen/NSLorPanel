@@ -2030,12 +2030,15 @@ function createMobilePanel() {
     var mobileScale = settings.general.mobileScale / 100;
     var gap = Math.round(8 * mobileScale);
     var padding = Math.round(8 * mobileScale);
+
+    // Очищаем старые панели
     ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
         if (mobileCollapsedContainers[pos]) { mobileCollapsedContainers[pos].remove(); mobileCollapsedContainers[pos] = null; }
         if (mobileExpandedContainers[pos]) { mobileExpandedContainers[pos].remove(); mobileExpandedContainers[pos] = null; }
         isMobilePanelExpanded[pos] = false;
     });
     settingsBtn = null; addCustomBtn = null; allButtons = {};
+
     var buttonDefs = {
         'up': { text: '▲', title: 'Наверх', action: function() { window.scrollTo({ top: 0, behavior: 'smooth' }); }, showSettings: true },
         'forum': { text: '📋', title: 'Форум', action: function(e) { if (e && e.button === 0) location.href = 'https://www.linux.org.ru/forum/'; }, longPressAction: 'forum' },
@@ -2049,95 +2052,356 @@ function createMobilePanel() {
         'down': { text: '▼', title: 'Вниз', action: function() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, showSettings: true },
         'help': { text: '❓', title: 'Справка', action: function() { showHelpModal(); } }
     };
+
     var orderedButtons = getOrderedButtons(settings);
+
+    // Определяем позицию профиля
     var profileConfig = settings.buttons['profile'];
-    if (!profileConfig || typeof profileConfig !== 'object') { profileConfig = { right: true, left: false, top: false, bottom: false }; settings.buttons['profile'] = profileConfig; }
-    var profilePosition = 'right';
-    ['right', 'left', 'top', 'bottom'].forEach(function(pos) { if (profileConfig[pos]) profilePosition = pos; });
+    if (!profileConfig || typeof profileConfig !== 'object') {
+        profileConfig = { right: true, left: false, top: false, bottom: false };
+        settings.buttons['profile'] = profileConfig;
+    }
+
+    // Определяем основную позицию для мобильной панели
+    var mainPosition = 'right'; // По умолчанию
+
+    // Считаем количество кнопок на каждой позиции
+    var buttonCounts = { right: 0, left: 0, top: 0, bottom: 0 };
+
+    orderedButtons.forEach(function(btnId) {
+        if (btnId === 'profile') return;
+        var btnConfig = settings.buttons[btnId];
+        if (btnConfig && typeof btnConfig === 'object') {
+            ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+                if (btnConfig[pos]) buttonCounts[pos]++;
+            });
+        }
+    });
+
+    // Добавляем профиль к счетчику
+    if (profileConfig.right) buttonCounts.right++;
+    if (profileConfig.left) buttonCounts.left++;
+    if (profileConfig.top) buttonCounts.top++;
+    if (profileConfig.bottom) buttonCounts.bottom++;
+
+    // Находим позицию с максимальным количеством кнопок
+    var maxCount = 0;
+    ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+        if (buttonCounts[pos] > maxCount) {
+            maxCount = buttonCounts[pos];
+            mainPosition = pos;
+        }
+    });
+
+    // Если нигде нет кнопок, используем правую позицию по умолчанию
+    if (maxCount === 0) {
+        mainPosition = 'right';
+        // Активируем профиль на правой позиции для мобильного режима
+        if (!profileConfig.right) {
+            settings.buttons['profile'] = { right: true, left: false, top: false, bottom: false };
+            saveSettings(settings);
+        }
+    }
+
+    // Создаем свернутую панель только для основной позиции
+    var collapsed = document.createElement('div');
+    collapsed.className = 'lor-mobile-collapsed lor-mobile-' + mainPosition;
+    collapsed.style.cssText = 'position:fixed !important;z-index:9999 !important;display:flex !important;gap:' + gap + 'px !important;';
+
+    if (settings.general.showBorder) {
+        collapsed.style.border = '1px solid ' + colors.borderColor;
+        collapsed.style.borderRadius = '12px';
+        collapsed.style.padding = padding + 'px';
+    }
+
+    if (mainPosition === 'right' || mainPosition === 'left') {
+        collapsed.style.flexDirection = 'column';
+    } else {
+        collapsed.style.flexDirection = 'row';
+    }
+
+    // Кнопка "Вверх"
+    var upBtn = createButton('▲', 'Наверх', null, false, settings.general.mobileScale);
+    upBtn.style.position = 'relative';
+    upBtn.addEventListener('click', function(e) {
+        if (upBtn._contextMenuJustFired) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    upBtn.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        showExtraButtons(upBtn, mainPosition);
+    });
+    collapsed.appendChild(upBtn);
+
+    // Кнопка уведомлений
+    var notifBtn = createButton('🔔', 'Уведомления', null, false, settings.general.mobileScale);
+    notifBtn.addEventListener('click', function(e) {
+        if (notifBtn._contextMenuJustFired) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        if (e && e.button === 0) location.href = 'https://www.linux.org.ru/notifications';
+    });
+    notifBtn.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        showNotificationsModal();
+    });
+    collapsed.appendChild(notifBtn);
+
+    if (settings.buttons['notifications'] && settings.buttons['notifications'][mainPosition]) {
+        updateNotificationBadge(notifBtn);
+        allButtons['notifications_' + mainPosition] = notifBtn;
+    }
+
+    // Кнопка "Вниз"
+    var downBtn = createButton('▼', 'Вниз', null, false, settings.general.mobileScale);
+    downBtn.style.position = 'relative';
+    downBtn.addEventListener('click', function(e) {
+        if (downBtn._contextMenuJustFired) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    });
+    downBtn.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        showExtraButtons(downBtn, mainPosition);
+    });
+    collapsed.appendChild(downBtn);
+
+    document.body.appendChild(collapsed);
+    mobileCollapsedContainers[mainPosition] = collapsed;
+
+    // Создаем развернутые панели для всех позиций, где есть кнопки
     ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
         var hasButtons = false;
-        orderedButtons.forEach(function(btnId) { if (btnId === 'profile') return; var btnConfig = settings.buttons[btnId]; if (btnConfig && typeof btnConfig === 'object' && btnConfig[pos]) hasButtons = true; });
-        var hasProfile = (pos === profilePosition);
+        orderedButtons.forEach(function(btnId) {
+            if (btnId === 'profile') return;
+            var btnConfig = settings.buttons[btnId];
+            if (btnConfig && typeof btnConfig === 'object' && btnConfig[pos]) hasButtons = true;
+        });
+
+        var hasProfile = false;
+        if (profileConfig && typeof profileConfig === 'object') {
+            hasProfile = profileConfig[pos];
+        }
+
         if (!hasButtons && !hasProfile) return;
-        var collapsed = document.createElement('div');
-        collapsed.className = 'lor-mobile-collapsed lor-mobile-' + pos;
-        collapsed.style.cssText = 'position:fixed !important;z-index:9999 !important;display:flex !important;gap:' + gap + 'px !important;';
-        if (settings.general.showBorder) { collapsed.style.border = '1px solid ' + colors.borderColor; collapsed.style.borderRadius = '12px'; collapsed.style.padding = padding + 'px'; }
-        if (pos === 'right' || pos === 'left') { collapsed.style.flexDirection = 'column'; } else { collapsed.style.flexDirection = 'row'; }
-        var upBtn = createButton('▲', 'Наверх', null, false, settings.general.mobileScale);
-        upBtn.style.position = 'relative';
-        upBtn.addEventListener('click', function(e) { if (upBtn._contextMenuJustFired) { e.preventDefault(); e.stopPropagation(); return; } window.scrollTo({ top: 0, behavior: 'smooth' }); });
-        upBtn.addEventListener('contextmenu', function(e) { e.preventDefault(); e.stopPropagation(); showExtraButtons(upBtn, pos); });
-        collapsed.appendChild(upBtn);
-        var notifBtn = createButton('🔔', 'Уведомления', null, false, settings.general.mobileScale);
-        notifBtn.addEventListener('click', function(e) { if (notifBtn._contextMenuJustFired) { e.preventDefault(); e.stopPropagation(); return; } if (e && e.button === 0) location.href = 'https://www.linux.org.ru/notifications'; });
-        notifBtn.addEventListener('contextmenu', function(e) { e.preventDefault(); e.stopPropagation(); showNotificationsModal(); });
-        collapsed.appendChild(notifBtn);
-        if (settings.buttons['notifications'] && settings.buttons['notifications'][pos]) { updateNotificationBadge(notifBtn); allButtons['notifications_' + pos] = notifBtn; }
-        var downBtn = createButton('▼', 'Вниз', null, false, settings.general.mobileScale);
-        downBtn.style.position = 'relative';
-        downBtn.addEventListener('click', function(e) { if (downBtn._contextMenuJustFired) { e.preventDefault(); e.stopPropagation(); return; } window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); });
-        downBtn.addEventListener('contextmenu', function(e) { e.preventDefault(); e.stopPropagation(); showExtraButtons(downBtn, pos); });
-        collapsed.appendChild(downBtn);
+
         var expanded = document.createElement('div');
         expanded.className = 'lor-mobile-expanded lor-mobile-' + pos;
         expanded.style.cssText = 'position:fixed !important;z-index:9999 !important;display:none !important;gap:' + gap + 'px !important;';
-        if (pos === 'right' || pos === 'left') { expanded.style.flexDirection = 'column'; expanded.style.maxHeight = '70vh'; expanded.style.overflowY = 'auto'; } else { expanded.style.flexDirection = 'row'; expanded.style.maxWidth = '90vw'; expanded.style.overflowX = 'auto'; }
-        if (settings.general.showBorder) { expanded.style.border = '1px solid ' + colors.borderColor; expanded.style.borderRadius = '12px'; expanded.style.padding = padding + 'px'; }
+
+        if (pos === 'right' || pos === 'left') {
+            expanded.style.flexDirection = 'column';
+            expanded.style.maxHeight = '70vh';
+            expanded.style.overflowY = 'auto';
+        } else {
+            expanded.style.flexDirection = 'row';
+            expanded.style.maxWidth = '90vw';
+            expanded.style.overflowX = 'auto';
+        }
+
+        if (settings.general.showBorder) {
+            expanded.style.border = '1px solid ' + colors.borderColor;
+            expanded.style.borderRadius = '12px';
+            expanded.style.padding = padding + 'px';
+        }
+
         if (hasProfile) {
             var profileBtn = createButton('👤', 'Профиль', null, true, settings.general.mobileScale);
             profileBtn.style.position = 'relative';
-            profileBtn.addEventListener('click', function(e) { if (profileBtn._contextMenuJustFired) { e.preventDefault(); e.stopPropagation(); return; } location.href = getProfileUrl(); });
-            profileBtn.addEventListener('contextmenu', function(e) { e.preventDefault(); e.stopPropagation(); showExtraButtons(profileBtn, pos); });
+            profileBtn.addEventListener('click', function(e) {
+                if (profileBtn._contextMenuJustFired) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
+                location.href = getProfileUrl();
+            });
+            profileBtn.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                showExtraButtons(profileBtn, pos);
+            });
             expanded.appendChild(profileBtn);
             allButtons['profile_' + pos] = profileBtn;
         }
+
         orderedButtons.forEach(function(btnId) {
             if (btnId === 'profile') return;
             var btnConfig = settings.buttons[btnId];
             if (!btnConfig || !btnConfig[pos]) return;
+
             var isCustom = btnId.startsWith('custom_');
             if (isCustom) {
                 var customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; });
                 if (customBtn) {
-                    var btn = createButton(customBtn.icon, customBtn.title, function() { location.href = customBtn.url; }, false, settings.general.mobileScale);
+                    var btn = createButton(customBtn.icon, customBtn.title, function() {
+                        location.href = customBtn.url;
+                    }, false, settings.general.mobileScale);
                     expanded.appendChild(btn);
                     allButtons[btnId + '_' + pos] = btn;
                 }
             } else if (buttonDefs[btnId]) {
                 var def = buttonDefs[btnId];
                 var btn = createButton(def.text, def.title, null, false, settings.general.mobileScale);
-                btn.addEventListener('click', function(e) { if (btn._contextMenuJustFired) { e.preventDefault(); e.stopPropagation(); return; } def.action(e); });
-                btn.addEventListener('contextmenu', function(e) { e.preventDefault(); e.stopPropagation(); if (def.showSettings) { showExtraButtons(btn, pos); } else if (btnId === 'forum') { showForumModal(); } else if (btnId === 'tracker') { showTrackerModal(); } else if (btnId === 'notifications') { showNotificationsModal(); } else if (btnId === 'saved') { addCurrentPageToSaved(); } else if (btnId === 'blacklist') { confirmAndAddToBlacklist(); } else if (btnId === 'visits') { confirmAndAddToTracked(); } });
-                if (def.showSettings) { btn.style.position = 'relative'; }
+                btn.addEventListener('click', function(e) {
+                    if (btn._contextMenuJustFired) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    }
+                    def.action(e);
+                });
+                btn.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (def.showSettings) {
+                        showExtraButtons(btn, pos);
+                    } else if (btnId === 'forum') {
+                        showForumModal();
+                    } else if (btnId === 'tracker') {
+                        showTrackerModal();
+                    } else if (btnId === 'notifications') {
+                        showNotificationsModal();
+                    } else if (btnId === 'saved') {
+                        addCurrentPageToSaved();
+                    } else if (btnId === 'blacklist') {
+                        confirmAndAddToBlacklist();
+                    } else if (btnId === 'visits') {
+                        confirmAndAddToTracked();
+                    }
+                });
+                if (def.showSettings) {
+                    btn.style.position = 'relative';
+                }
                 expanded.appendChild(btn);
                 allButtons[btnId + '_' + pos] = btn;
-                if (btnId === 'notifications') { updateNotificationBadge(btn); }
+                if (btnId === 'notifications') {
+                    updateNotificationBadge(btn);
+                }
             }
         });
-        document.body.appendChild(collapsed);
+
         document.body.appendChild(expanded);
-        mobileCollapsedContainers[pos] = collapsed;
         mobileExpandedContainers[pos] = expanded;
     });
+
     positionMobilePanels();
-    if (settings.buttons['notifications']) { setInterval(function() { ['right', 'left', 'top', 'bottom'].forEach(function(pos) { var key = 'notifications_' + pos; if (allButtons[key]) updateNotificationBadge(allButtons[key]); }); }, 5000); }
+
+    // Обновляем уведомления
+    if (settings.buttons['notifications']) {
+        setInterval(function() {
+            ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+                var key = 'notifications_' + pos;
+                if (allButtons[key]) updateNotificationBadge(allButtons[key]);
+            });
+        }, 5000);
+    }
 }
 
 function positionMobilePanels() {
     var scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-    var positions = {
-        right: { top: '50%', transform: 'translateY(-50%)', left: 'auto', right: scrollbarWidth + Math.round(window.innerWidth * 0.02) + 'px', bottom: 'auto' },
-        left: { top: '50%', transform: 'translateY(-50%)', left: Math.round(window.innerWidth * 0.02) + 'px', right: 'auto', bottom: 'auto' },
-        top: { top: Math.round(window.innerHeight * 0.02) + 'px', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: 'auto' },
-        bottom: { top: 'auto', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: Math.round(window.innerHeight * 0.02) + 'px' }
+
+    // Позиции для свернутых панелей - строго по краям
+    var collapsedPositions = {
+        right: {
+            top: '25%', // Верхняя треть экрана
+            transform: 'translateY(-50%)',
+            left: 'auto',
+            right: '0px', // Самый край
+            bottom: 'auto'
+        },
+        left: {
+            top: '25%', // Верхняя треть экрана
+            transform: 'translateY(-50%)',
+            left: '0px', // Самый край
+            right: 'auto',
+            bottom: 'auto'
+        },
+        top: {
+            top: '0px', // Самый верх
+            transform: 'translateX(-50%)',
+            left: '50%',
+            right: 'auto',
+            bottom: 'auto'
+        },
+        bottom: {
+            top: 'auto',
+            transform: 'translateX(-50%)',
+            left: '50%',
+            right: 'auto',
+            bottom: '0px' // Самый низ
+        }
     };
+
+    // Позиции для развернутых панелей - стандартные с небольшим отступом
+    var expandedPositions = {
+        right: {
+            top: '50%',
+            transform: 'translateY(-50%)',
+            left: 'auto',
+            right: '5px', // Небольшой отступ для скроллбара
+            bottom: 'auto'
+        },
+        left: {
+            top: '50%',
+            transform: 'translateY(-50%)',
+            left: '5px', // Небольшой отступ
+            right: 'auto',
+            bottom: 'auto'
+        },
+        top: {
+            top: '5px', // Небольшой отступ сверху
+            transform: 'translateX(-50%)',
+            left: '50%',
+            right: 'auto',
+            bottom: 'auto'
+        },
+        bottom: {
+            top: 'auto',
+            transform: 'translateX(-50%)',
+            left: '50%',
+            right: 'auto',
+            bottom: '5px' // Небольшой отступ снизу
+        }
+    };
+
     ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
         var collapsed = mobileCollapsedContainers[pos];
         var expanded = mobileExpandedContainers[pos];
-        var posStyle = positions[pos];
-        if (collapsed) { for (var prop in posStyle) { collapsed.style[prop] = posStyle[prop]; } }
-        if (expanded) { for (var prop in posStyle) { expanded.style[prop] = posStyle[prop]; } }
+
+        if (collapsed) {
+            var posStyle = collapsedPositions[pos];
+            for (var prop in posStyle) {
+                collapsed.style[prop] = posStyle[prop];
+            }
+            // Добавляем прозрачный фон для лучшей видимости на краю
+            collapsed.style.background = 'rgba(0, 0, 0, 0.3)';
+            collapsed.style.backdropFilter = 'blur(5px)';
+            collapsed.style.webkitBackdropFilter = 'blur(5px)';
+        }
+
+        if (expanded) {
+            var expPosStyle = expandedPositions[pos];
+            for (var prop in expPosStyle) {
+                expanded.style[prop] = expPosStyle[prop];
+            }
+            // Для развернутых панелей тоже добавляем фон
+            expanded.style.background = 'rgba(0, 0, 0, 0.5)';
+            expanded.style.backdropFilter = 'blur(8px)';
+            expanded.style.webkitBackdropFilter = 'blur(8px)';
+        }
     });
 }
 
