@@ -1359,44 +1359,96 @@ function createButton(text, title, callback, marginBottom, forceScale) {
     btn.textContent = text;
     btn.title = title;
     btn.style.cssText = 'width:' + size + 'px;height:' + size + 'px;background:' + colors.btnBg + ';color:' + colors.btnColor + ';border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:' + fontSize + 'px;user-select:none;opacity:0.7;position:relative;' + (marginBottom ? 'margin-bottom:30px;' : '');
+
     btn._contextMenuJustFired = false;
-    btn.onmouseenter = function() { this.style.opacity = '1'; this.style.background = colors.btnBgHover; };
-    btn.onmouseleave = function() { this.style.opacity = '0.7'; this.style.background = colors.btnBg; clearTimeout(btn._longPressTimer); btn._longPressTriggered = false; btn._contextMenuJustFired = false; };
     btn._longPressTimer = null;
     btn._longPressTriggered = false;
-    var mouseStartX = 0, mouseStartY = 0;
+    btn._mouseDownTime = 0;
+
+    btn.onmouseenter = function() {
+        this.style.opacity = '1';
+        this.style.background = colors.btnBgHover;
+    };
+
+    btn.onmouseleave = function() {
+        this.style.opacity = '0.7';
+        this.style.background = colors.btnBg;
+        clearTimeout(btn._longPressTimer);
+        btn._longPressTriggered = false;
+        btn._contextMenuJustFired = false;
+    };
+
     btn.onmousedown = function(e) {
-        if (e.button !== 0) { if (e.button === 2) { btn._contextMenuJustFired = true; setTimeout(function() { btn._contextMenuJustFired = false; }, 300); } return; }
-        btn._longPressTriggered = false; btn._contextMenuJustFired = false; mouseStartX = e.clientX; mouseStartY = e.clientY;
+        if (e.button === 2) {
+            btn._contextMenuJustFired = true;
+            setTimeout(function() { btn._contextMenuJustFired = false; }, 300);
+            return;
+        }
+        if (e.button !== 0) return;
+
+        btn._longPressTriggered = false;
+        btn._contextMenuJustFired = false;
+        btn._mouseDownTime = Date.now();
+
         btn._longPressTimer = setTimeout(function() {
-            btn._longPressTriggered = true; btn._contextMenuJustFired = true;
-            var evt = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: mouseStartX, clientY: mouseStartY });
+            btn._longPressTriggered = true;
+            btn._contextMenuJustFired = true;
+            var evt = new MouseEvent('contextmenu', {
+                bubbles: true,
+                cancelable: true,
+                button: 2,
+                clientX: e.clientX,
+                clientY: e.clientY
+            });
             btn.dispatchEvent(evt);
-            setTimeout(function() { btn._contextMenuJustFired = false; btn._longPressTriggered = false; }, 300);
         }, 500);
     };
+
     btn.onmouseup = function(e) {
-        if (btn._longPressTriggered || btn._contextMenuJustFired) {
-            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-            clearTimeout(btn._longPressTimer);
-            return false;
-        }
         clearTimeout(btn._longPressTimer);
-    };
-    btn.onmousemove = function(e) {
-        if (btn._longPressTimer && (Math.abs(e.clientX - mouseStartX) + Math.abs(e.clientY - mouseStartY) > 5)) {
-            clearTimeout(btn._longPressTimer); btn._longPressTimer = null; btn._longPressTriggered = false;
-        }
-    };
-    btn.addEventListener('contextmenu', function(e) { btn._contextMenuJustFired = true; setTimeout(function() { btn._contextMenuJustFired = false; }, 300); });
-    btn.addEventListener('click', function(e) {
-        if (btn._contextMenuJustFired) {
-            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-            btn._contextMenuJustFired = false;
+
+        // Если был длинный клик, предотвращаем обычный клик
+        if (btn._longPressTriggered || btn._contextMenuJustFired) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            // Сбрасываем флаг через некоторое время
+            setTimeout(function() {
+                btn._contextMenuJustFired = false;
+                btn._longPressTriggered = false;
+            }, 100);
             return false;
         }
+    };
+
+    btn.onmousemove = function(e) {
+        if (btn._longPressTimer && Math.abs(e.clientX - btn._mouseDownTime ? e.clientX : 0) > 5) {
+            clearTimeout(btn._longPressTimer);
+            btn._longPressTimer = null;
+            btn._longPressTriggered = false;
+        }
+    };
+
+    // Перехватываем contextmenu для установки флага
+    btn.addEventListener('contextmenu', function(e) {
+        btn._contextMenuJustFired = true;
+        setTimeout(function() { btn._contextMenuJustFired = false; }, 300);
+    });
+
+    // Используем захват фазы для перехвата клика
+    btn.addEventListener('click', function(e) {
+        // Если только что было контекстное меню или длинный клик
+        if (btn._contextMenuJustFired || btn._longPressTriggered) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            return false;
+        }
+
         if (callback) callback(e);
-    }, true);
+    }, true); // true = фаза захвата
+
     return btn;
 }
 
