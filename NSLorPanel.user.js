@@ -589,14 +589,166 @@ function makeReplyNicksClickable() {
                     link.href = '/people/' + nick + '/profile';
                     link.textContent = nick;
                     link.style.cssText = 'color:#4a90d9;text-decoration:none;cursor:pointer;';
+
+                    // Переменные для отслеживания состояния
+                    var longPressTimer = null;
+                    var longPressTriggered = false;
+                    var touchMoved = false;
+                    var mouseMoved = false;
+                    var startX = 0;
+                    var startY = 0;
+                    var tooltipShown = false;
+                    var isLinkClicked = false;
+
+                    // Предотвращаем переход по ссылке при длительном нажатии
+                    link.addEventListener('click', function(e) {
+                        if (longPressTriggered || isLinkClicked) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.stopImmediatePropagation();
+                            isLinkClicked = false;
+                            return false;
+                        }
+                        // Разрешаем нормальный переход
+                    }, true); // Фаза захвата для приоритета
+
+                    // Обработка для десктопа (мышь)
+                    link.addEventListener('mousedown', function(e) {
+                        if (e.button !== 0) return; // Только левая кнопка
+
+                        longPressTriggered = false;
+                        mouseMoved = false;
+                        isLinkClicked = false;
+                        startX = e.clientX;
+                        startY = e.clientY;
+
+                        longPressTimer = setTimeout(function() {
+                            longPressTriggered = true;
+                            isLinkClicked = true;
+                            showVisitTooltip(link, nick);
+                            tooltipShown = true;
+
+                            // Автоматически скрываем тултип через 3 секунды
+                            setTimeout(function() {
+                                hideVisitTooltip();
+                                tooltipShown = false;
+                            }, 3000);
+                        }, 500);
+                    });
+
+                    link.addEventListener('mousemove', function(e) {
+                        if (longPressTimer) {
+                            var deltaX = Math.abs(e.clientX - startX);
+                            var deltaY = Math.abs(e.clientY - startY);
+                            if (deltaX > 10 || deltaY > 10) {
+                                clearTimeout(longPressTimer);
+                                longPressTimer = null;
+                                mouseMoved = true;
+                            }
+                        }
+                    });
+
+                    link.addEventListener('mouseup', function(e) {
+                        clearTimeout(longPressTimer);
+                        longPressTimer = null;
+
+                        if (longPressTriggered) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.stopImmediatePropagation();
+                            longPressTriggered = false;
+                            return false;
+                        }
+                    });
+
+                    link.addEventListener('mouseleave', function() {
+                        clearTimeout(longPressTimer);
+                        longPressTimer = null;
+
+                        if (!tooltipShown) {
+                            hideVisitTooltip();
+                        }
+
+                        if (!longPressTriggered) {
+                            this.style.textDecoration = 'none';
+                        }
+                    });
+
+                    // Показываем тултип при наведении (без длительного нажатия)
                     link.addEventListener('mouseenter', function(e) {
                         this.style.textDecoration = 'underline';
-                        showVisitTooltip(e.target, nick);
+                        if (!longPressTriggered && !tooltipShown) {
+                            showVisitTooltip(e.target, nick);
+                            tooltipShown = true;
+                        }
                     });
-                    link.addEventListener('mouseleave', function(e) {
-                        this.style.textDecoration = 'none';
+
+                    // Обработка для мобильных устройств (тач)
+                    link.addEventListener('touchstart', function(e) {
+                        touchMoved = false;
+                        longPressTriggered = false;
+                        isLinkClicked = false;
+                        tooltipShown = false;
+                        startX = e.touches[0].clientX;
+                        startY = e.touches[0].clientY;
+
+                        longPressTimer = setTimeout(function() {
+                            longPressTriggered = true;
+                            isLinkClicked = true;
+                            touchMoved = true;
+                            showVisitTooltip(link, nick);
+                            tooltipShown = true;
+
+                            // Автоматически скрываем тултип через 3 секунды
+                            setTimeout(function() {
+                                hideVisitTooltip();
+                                tooltipShown = false;
+                            }, 3000);
+                        }, 500);
+                    }, { passive: true });
+
+                    link.addEventListener('touchmove', function(e) {
+                        if (longPressTimer) {
+                            var deltaX = Math.abs(e.touches[0].clientX - startX);
+                            var deltaY = Math.abs(e.touches[0].clientY - startY);
+                            if (deltaX > 10 || deltaY > 10) {
+                                clearTimeout(longPressTimer);
+                                longPressTimer = null;
+                                touchMoved = true;
+                            }
+                        }
+                    }, { passive: true });
+
+                    link.addEventListener('touchend', function(e) {
+                        clearTimeout(longPressTimer);
+                        longPressTimer = null;
+
+                        if (longPressTriggered) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            longPressTriggered = false;
+                        } else if (!touchMoved) {
+                            hideVisitTooltip();
+                        }
+                        touchMoved = false;
+                    });
+
+                    link.addEventListener('touchcancel', function(e) {
+                        clearTimeout(longPressTimer);
+                        longPressTimer = null;
+                        longPressTriggered = false;
+                        isLinkClicked = false;
                         hideVisitTooltip();
                     });
+
+                    // Предотвращаем стандартное контекстное меню
+                    link.addEventListener('contextmenu', function(e) {
+                        if (longPressTriggered) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }
+                    });
+
                     var beforeNick = nodeText.substring(0, fromIndex + 3 + afterFrom.indexOf(nick));
                     var afterNick = nodeText.substring(fromIndex + 3 + afterFrom.indexOf(nick) + nick.length);
                     var beforeTextNode = document.createTextNode(beforeNick);
