@@ -11,75 +11,184 @@
 (function() {
 'use strict';
 
-// === КОНСТАНТЫ ===
-const PANEL_SETTINGS_KEY = 'lor_panel_settings_v2';
-const BLACKLIST_KEY = 'lor_blacklist';
-const STYLE_FILTER = 'blur(4px)';
-const TRANSITION_DURATION = 200;
-const BLUR_MARK = '!blur!';
-const PAGE_SIZE = 20;
+const CONFIG = {
+    PANEL_SETTINGS_KEY: 'lor_panel_settings_v3',
+    BLACKLIST_KEY: 'lor_blacklist',
+    STYLE_FILTER: 'blur(4px)',
+    TRANSITION_DURATION: 200,
+    BLUR_MARK: '!blur!',
+    PAGE_SIZE: 20,
+    SCROLL_TRIGGER_RATIO: 0.6,
+    INIT_DELAY_MS: 300,
+    MUTATION_DEBOUNCE_MS: 50
+};
 
-// === ГЛОБАЛЬНОЕ СОСТОЯНИЕ ===
-var state = {
+const SELECTORS = {
+    ARTICLES: 'article.news, article.mini-news, article.gallery-item, article.story, section.news-item, div.story',
+    AUTHOR: [
+        'a[itemprop="creator"]',
+        '.sign a[href*="/people/"]',
+        '.topic-author a[href*="/people/"]',
+        '.author a[href*="/people/"]'
+    ],
+    MINI_LINK: 'a[href*="/news/"], a[href*="/gallery/"], a[href*="/stories/"]',
+    ANCHOR_CONTAINER: '#bd'
+};
+
+const PATHS = {
+    NEWS_PAGES: ['/', '/news/'],
+    NEWS_PREFIXES: ['/news', '/gallery', '/stories']
+};
+
+const state = {
     blacklist: [],
     filterSettings: { enabled: true, mode: 'cut', applyToMini: true, animateBlur: true },
     isLoading: false,
     noMoreNews: false,
-    currentOffset: PAGE_SIZE,
+    currentOffset: CONFIG.PAGE_SIZE,
     anchorParent: null,
     anchorNext: null,
     newsInitialized: false,
-    loadedIds: {}
+    loadedIds: Object.create(null)
 };
 
-// === ЧТЕНИЕ НАСТРОЕК И ЧС ИЗ ПАНЕЛИ ===
-function getPanelFilterSettings() {
+function safeLocalStorageGet(key, defaultValue) {
     try {
-        var saved = JSON.parse(localStorage.getItem(PANEL_SETTINGS_KEY));
-        if (saved && saved.filter) return saved.filter;
-    } catch(e) {}
-    return { enabled: true, mode: 'cut', applyToMini: true, animateBlur: true };
+        var raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : defaultValue;
+    } catch (e) {
+        return defaultValue;
+    }
 }
 
-function getBlacklist() {
-    try { return JSON.parse(localStorage.getItem(BLACKLIST_KEY) || '[]'); } catch(e) { return []; }
+function parseHTML(html) {
+    return new DOMParser().parseFromString(html, 'text/html');
 }
 
-// === ПРОВЕРКА АВТОРА ===
-function isAuthorBlacklisted(author) {
-    if (!author) return false;
-    var clean = author.trim().toLowerCase();
-    return state.blacklist.some(function(b) { return b.toLowerCase() === clean; });
+function getFilterableArticles() {
+    return document.querySelectorAll(SELECTORS.ARTICLES);
 }
 
 function getArticleAuthor(article) {
-    var selectors = ['a[itemprop="creator"]', '.sign a[href*="/people/"]', '.topic-author a[href*="/people/"]', '.author a[href*="/people/"]'];
-    for (var i = 0; i < selectors.length; i++) {
-        var el = article.querySelector(selectors[i]);
-        if (el && el.textContent.trim()) return el.textContent.trim();
+    if (!article) return null;
+    for (var i = 0; i < SELECTORS.AUTHOR.length; i++) {
+        var el = article.querySelector(SELECTORS.AUTHOR[i]);
+        if (el && el.textContent.trim()) {
+            return el.textContent.trim();
+        }
     }
     return null;
 }
 
-function hasBlurMark(article) {
-    var sign = article.querySelector('.sign');
-    return sign && sign.textContent && sign.textContent.indexOf(BLUR_MARK) !== -1;
+function isAuthorBlacklisted(author) {
+    if (!author) return false;
+    var clean = author.trim().toLowerCase();
+    return state.blacklist.some(function(b) {
+        return b.toLowerCase() === clean;
+    });
 }
 
-// === БЛЮРИНГ (исправленный, без мерцания) ===
-function applyBlur(article) {
+function hasBlurMark(article) {
+    var sign = article.querySelector('.sign');
+    return sign && sign.textContent && sign.textContent.indexOf(CONFIG.BLUR_MARK) !== -1;
+}
+
+function isNewsPage() {
+    var path = location.pathname;
+    if (PATHS.NEWS_PAGES.indexOf(path) !== -1) return true;
+    for (var i = 0; i < PATHS.NEWS_PREFIXES.length; i++) {
+        if (path.indexOf(PATHS.NEWS_PREFIXES[i]) === 0) return true;
+    }
+    return false;
+}
+
+function resetArticleState(article) {
+    article._filterProcessed = false;
+    article._needsRecheck = false;
+    article._wasBlurred = false;
+    article._wasHidden = false;
+    article._blurAttached = false;
+}
+
+function markAsLoaded(article) {
+    if (article && article.id) {
+        state.loadedIds[article.id] = true;
+    }
+}
+
+function isAlreadyLoaded(article) {
+    return article && article.id && state.loadedIds[article.id] === true;
+}
+
+function applyArticleFilterState(article, shouldFilter) {
+    var settings = state.filterSettings;
+    if (!settings.enabled) {
+        article.style.display = '';
+        article.style.transition = '';
+        article.style.filter = '';
+        detachBlur(article);
+        article._wasHidden = false;
+        article._wasBlurred = false;
+        return;
+    }
+    if (settings.mode === 'blur') {
+        applyBlurMode(article, shouldFilter);
+    } else {
+        applyCutMode(article, shouldFilter);
+    }
+}
+
+function applyBlurMode(article, shouldBlur) {
+    if (shouldBlur) {
+        if (!article._wasBlurred) {
+            attachBlur(article);
+            article._wasBlurred = true;
+        }
+        article._wasHidden = false;
+        article.style.display = '';
+    } else {
+        if (article._wasBlurred) {
+            detachBlur(article);
+            article._wasBlurred = false;
+        }
+        article._wasHidden = false;
+        article.style.display = '';
+    }
+}
+
+function applyCutMode(article, shouldCut) {
+    if (shouldCut) {
+        if (!article._wasHidden) {
+            article.style.display = 'none';
+            article._wasHidden = true;
+            markAsLoaded(article);
+        }
+        if (article._wasBlurred) {
+            detachBlur(article);
+            article._wasBlurred = false;
+        }
+    } else {
+        if (article._wasHidden) {
+            article.style.display = '';
+            article._wasHidden = false;
+        }
+        if (article._wasBlurred) {
+            detachBlur(article);
+            article._wasBlurred = false;
+        }
+    }
+}
+
+function attachBlur(article) {
     if (article._blurAttached) return;
-
-    // Плавный переход через CSS
-    article.style.transition = 'filter ' + (TRANSITION_DURATION / 1000) + 's ease';
-    article.style.filter = STYLE_FILTER;
-
+    article.style.transition = 'filter ' + (CONFIG.TRANSITION_DURATION / 1000) + 's ease';
+    article.style.filter = CONFIG.STYLE_FILTER;
     article.addEventListener('mouseenter', handleMouseEnter);
     article.addEventListener('mouseleave', handleMouseLeave);
     article._blurAttached = true;
 }
 
-function removeBlur(article) {
+function detachBlur(article) {
     article.style.transition = '';
     article.style.filter = '';
     article.removeEventListener('mouseenter', handleMouseEnter);
@@ -92,74 +201,52 @@ function handleMouseEnter() {
 }
 
 function handleMouseLeave() {
-    this.style.filter = STYLE_FILTER;
+    this.style.filter = CONFIG.STYLE_FILTER;
 }
 
-// === ОСНОВНАЯ ФИЛЬТРАЦИЯ ===
-function filterExistingArticles() {
+function onSettingsChanged() {
     state.filterSettings = getPanelFilterSettings();
     state.blacklist = getBlacklist();
+    var articles = getFilterableArticles();
+    for (var i = 0; i < articles.length; i++) {
+        articles[i]._needsRecheck = true;
+    }
+    filterExistingArticles();
+}
 
-    var articles = document.querySelectorAll('article.news, article.mini-news, article.gallery-item, article.story, section.news-item, div.story');
-    articles.forEach(function(art) {
-        if (art._filterProcessed && !art._needsRecheck) return;
+function getPanelFilterSettings() {
+    var saved = safeLocalStorageGet(CONFIG.PANEL_SETTINGS_KEY, null);
+    return (saved && saved.filter) ? saved.filter : {
+        enabled: true,
+        mode: 'cut',
+        applyToMini: true,
+        animateBlur: true
+    };
+}
 
+function getBlacklist() {
+    return safeLocalStorageGet(CONFIG.BLACKLIST_KEY, []);
+}
+
+function filterExistingArticles() {
+    if (!state.filterSettings || !state.blacklist) {
+        state.filterSettings = getPanelFilterSettings();
+        state.blacklist = getBlacklist();
+    }
+    var articles = getFilterableArticles();
+    for (var i = 0; i < articles.length; i++) {
+        var art = articles[i];
+        if (art._filterProcessed && !art._needsRecheck) {
+            continue;
+        }
         var author = getArticleAuthor(art);
         var isBl = isAuthorBlacklisted(author);
         var hasMark = hasBlurMark(art);
-
-        if (state.filterSettings.enabled) {
-            if (state.filterSettings.mode === 'blur') {
-                if (isBl || hasMark) {
-                    if (!art._wasBlurred) {
-                        applyBlur(art);
-                        art._wasBlurred = true;
-                    }
-                    art._wasHidden = false;
-                    art.style.display = '';
-                } else {
-                    if (art._wasBlurred) {
-                        removeBlur(art);
-                        art._wasBlurred = false;
-                    }
-                    art._wasHidden = false;
-                    art.style.display = '';
-                }
-            } else {
-                if (isBl) {
-                    if (!art._wasHidden) {
-                        art.style.display = 'none';
-                        art._wasHidden = true;
-                        if (art.id) state.loadedIds[art.id] = true;
-                    }
-                    if (art._wasBlurred) {
-                        removeBlur(art);
-                        art._wasBlurred = false;
-                    }
-                } else {
-                    if (art._wasHidden) {
-                        art.style.display = '';
-                        art._wasHidden = false;
-                    }
-                    if (art._wasBlurred) {
-                        removeBlur(art);
-                        art._wasBlurred = false;
-                    }
-                }
-            }
-        } else {
-            art.style.display = '';
-            art._wasHidden = false;
-            if (art._wasBlurred) {
-                removeBlur(art);
-                art._wasBlurred = false;
-            }
-        }
-
+        var shouldFilter = isBl || hasMark;
+        applyArticleFilterState(art, shouldFilter);
         art._filterProcessed = true;
         art._needsRecheck = false;
-    });
-
+    }
     if (state.filterSettings.enabled && state.filterSettings.mode === 'cut' && isNewsPage()) {
         if (!state.newsInitialized) {
             initNewsPage();
@@ -170,15 +257,14 @@ function filterExistingArticles() {
     }
 }
 
-// === ЯКОРЯ И БЕСШОВНАЯ ВСТАВКА ===
 function saveAnchor() {
-    var existing = document.querySelectorAll('article.news, article.mini-news, article.gallery-item, article.story');
+    var existing = getFilterableArticles();
     if (existing.length > 0) {
         var last = existing[existing.length - 1];
         state.anchorParent = last.parentNode;
         state.anchorNext = last.nextSibling;
     } else {
-        state.anchorParent = document.querySelector('#bd') || document.body;
+        state.anchorParent = document.querySelector(SELECTORS.ANCHOR_CONTAINER) || document.body;
         state.anchorNext = null;
     }
 }
@@ -186,42 +272,28 @@ function saveAnchor() {
 function appendArticles(articles) {
     saveAnchor();
     if (!state.anchorParent) return;
-    articles.forEach(function(art) {
-        if (art.id && state.loadedIds[art.id]) return;
-        if (art.id) state.loadedIds[art.id] = true;
-
+    for (var i = 0; i < articles.length; i++) {
+        var art = articles[i];
+        if (isAlreadyLoaded(art)) continue;
+        markAsLoaded(art);
         var clone = document.importNode(art, true);
-        clone._filterProcessed = false;
-        clone._needsRecheck = true;
-        clone._wasBlurred = false;
-        clone._wasHidden = false;
-        clone._blurAttached = false;
-
+        resetArticleState(clone);
         if (state.anchorNext) {
             state.anchorParent.insertBefore(clone, state.anchorNext);
         } else {
             state.anchorParent.appendChild(clone);
         }
-    });
+    }
     filterExistingArticles();
-}
-
-// === БЕСКОНЕЧНАЯ ЛЕНТА ===
-function isNewsPage() {
-    var path = location.pathname;
-    return path === '/' || path === '/news/' || path.indexOf('/news') === 0 ||
-           path.indexOf('/gallery') === 0 || path.indexOf('/stories') === 0;
 }
 
 function onScroll() {
     if (state.isLoading || state.noMoreNews || state.filterSettings.mode !== 'cut') return;
-
-    var articles = document.querySelectorAll('article.news, article.mini-news, article.gallery-item, article.story');
+    var articles = getFilterableArticles();
     if (articles.length === 0) return;
-
-    var trigger = articles[Math.floor(articles.length * 0.6)];
+    var triggerIndex = Math.floor(articles.length * CONFIG.SCROLL_TRIGGER_RATIO);
+    var trigger = articles[triggerIndex];
     if (!trigger) return;
-
     var rect = trigger.getBoundingClientRect();
     if (rect.top < window.innerHeight) {
         loadNextPage();
@@ -231,27 +303,22 @@ function onScroll() {
 function loadNextPage() {
     if (state.isLoading || state.noMoreNews) return;
     state.isLoading = true;
-
     var url = 'https://www.linux.org.ru/news/?offset=' + state.currentOffset;
-
     fetch(url)
         .then(function(r) { return r.text(); })
         .then(function(html) {
-            var doc = new DOMParser().parseFromString(html, 'text/html');
-            var articles = doc.querySelectorAll('article.news, article.mini-news, article.gallery-item, article.story');
-
+            var doc = parseHTML(html);
+            var articles = doc.querySelectorAll(SELECTORS.ARTICLES);
             if (articles.length === 0) {
                 state.noMoreNews = true;
                 state.isLoading = false;
                 return;
             }
-
             var miniToCheck = [];
             var regular = [];
-
-            articles.forEach(function(art) {
-                if (art.id && state.loadedIds[art.id]) return;
-
+            for (var i = 0; i < articles.length; i++) {
+                var art = articles[i];
+                if (isAlreadyLoaded(art)) continue;
                 if (art.classList.contains('mini-news') || art.classList.contains('story')) {
                     miniToCheck.push(art);
                 } else {
@@ -260,112 +327,102 @@ function loadNextPage() {
                         regular.push(art);
                     }
                 }
-            });
-
+            }
             appendArticles(regular);
-            state.currentOffset += PAGE_SIZE;
-
+            state.currentOffset += CONFIG.PAGE_SIZE;
             if (miniToCheck.length === 0 || !state.filterSettings.applyToMini) {
                 state.isLoading = false;
                 return;
             }
-
-            var checked = 0;
-            var approvedMini = [];
-
-            miniToCheck.forEach(function(mini) {
-                var link = mini.querySelector('a[href*="/news/"], a[href*="/gallery/"], a[href*="/stories/"]');
-                if (!link) {
-                    checked++;
-                    if (checked >= miniToCheck.length) done();
-                    return;
-                }
-
-                fetch(link.href)
-                    .then(function(r) { return r.text(); })
-                    .then(function(html2) {
-                        var doc2 = new DOMParser().parseFromString(html2, 'text/html');
-                        var author = getArticleAuthor(doc2.querySelector('article') || doc2);
-                        if (!isAuthorBlacklisted(author)) {
-                            approvedMini.push(mini);
-                        }
-                        checked++;
-                        if (checked >= miniToCheck.length) done();
-                    })
-                    .catch(function() {
-                        checked++;
-                        if (checked >= miniToCheck.length) done();
-                    });
-            });
-
-            function done() {
-                appendArticles(approvedMini);
-                state.isLoading = false;
-            }
+            checkMiniNewsAuthors(miniToCheck);
         })
         .catch(function() {
             state.isLoading = false;
         });
 }
 
+function checkMiniNewsAuthors(miniList) {
+    var checked = 0;
+    var approved = [];
+    function onCheckDone() {
+        checked++;
+        if (checked >= miniList.length) {
+            appendArticles(approved);
+            state.isLoading = false;
+        }
+    }
+    for (var i = 0; i < miniList.length; i++) {
+        (function(mini) {
+            var link = mini.querySelector(SELECTORS.MINI_LINK);
+            if (!link) {
+                onCheckDone();
+                return;
+            }
+            fetch(link.href)
+                .then(function(r) { return r.text(); })
+                .then(function(html) {
+                    var doc = parseHTML(html);
+                    var article = doc.querySelector('article') || doc;
+                    var author = getArticleAuthor(article);
+                    if (!isAuthorBlacklisted(author)) {
+                        approved.push(mini);
+                    }
+                    onCheckDone();
+                })
+                .catch(onCheckDone);
+        })(miniList[i]);
+    }
+}
+
 function initNewsPage() {
     if (state.newsInitialized) return;
     state.newsInitialized = true;
-
-    document.querySelectorAll('article.news, article.mini-news, article.gallery-item, article.story').forEach(function(art) {
-        if (art.id) state.loadedIds[art.id] = true;
-    });
-
+    var articles = getFilterableArticles();
+    for (var i = 0; i < articles.length; i++) {
+        markAsLoaded(articles[i]);
+    }
     saveAnchor();
     onScroll();
     window.addEventListener('scroll', onScroll);
 }
 
-// === ЗАПУСК И СОБЫТИЯ ===
 function init() {
+    state.filterSettings = getPanelFilterSettings();
+    state.blacklist = getBlacklist();
     filterExistingArticles();
-
-    window.addEventListener('lor-blacklist-changed', function() {
-        document.querySelectorAll('article.news, article.mini-news, article.gallery-item, article.story').forEach(function(art) {
-            art._needsRecheck = true;
-        });
-        filterExistingArticles();
-    });
-
-    window.addEventListener('lor-filter-settings-changed', function() {
-        document.querySelectorAll('article.news, article.mini-news, article.gallery-item, article.story').forEach(function(art) {
-            art._needsRecheck = true;
-        });
-        filterExistingArticles();
-    });
-
+    var events = [
+        'lor-blacklist-changed',
+        'lor-filter-settings-changed'
+    ];
+    for (var i = 0; i < events.length; i++) {
+        window.addEventListener(events[i], onSettingsChanged);
+    }
     window.addEventListener('storage', function(e) {
-        if (e.key === BLACKLIST_KEY || e.key === PANEL_SETTINGS_KEY) {
-            document.querySelectorAll('article.news, article.mini-news, article.gallery-item, article.story').forEach(function(art) {
-                art._needsRecheck = true;
-            });
-            filterExistingArticles();
+        if (e.key === CONFIG.BLACKLIST_KEY || e.key === CONFIG.PANEL_SETTINGS_KEY) {
+            onSettingsChanged();
         }
     });
+    var mutationObserver = new MutationObserver(function(mutations) {
+        var hasAdded = false;
+        for (var i = 0; i < mutations.length; i++) {
+            if (mutations[i].addedNodes && mutations[i].addedNodes.length) {
+                hasAdded = true;
+                break;
+            }
+        }
+        if (hasAdded) {
+            setTimeout(filterExistingArticles, CONFIG.MUTATION_DEBOUNCE_MS);
+        }
+    });
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() { setTimeout(init, 300); });
-} else {
-    setTimeout(init, 300);
-}
-
-var mutationObserver = new MutationObserver(function(mutations) {
-    var added = false;
-    mutations.forEach(function(m) {
-        if (m.addedNodes && m.addedNodes.length) added = true;
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(init, CONFIG.INIT_DELAY_MS);
     });
-    if (added) {
-        setTimeout(function() {
-            filterExistingArticles();
-        }, 50);
-    }
-});
-mutationObserver.observe(document.body, { childList: true, subtree: true });
+} else {
+    setTimeout(init, CONFIG.INIT_DELAY_MS);
+}
 
 })();
