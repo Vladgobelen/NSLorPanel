@@ -340,10 +340,10 @@ function addDesktopPanel() {
     settings.buttons['profile'] = profCfg;
     let profPos = 'right'; POSITIONS.forEach(pos => { if (profCfg[pos]) profPos = pos; });
     const positions = {
-        right: { top: '50%', transform: 'translateY(-50%)', left: 'auto', right: (sbw + 20) + 'px', bottom: 'auto', dir: 'column' },
-        left: { top: '50%', transform: 'translateY(-50%)', left: '20px', right: 'auto', bottom: 'auto', dir: 'column' },
-        top: { top: '20px', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: 'auto', dir: 'row' },
-        bottom: { top: 'auto', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: '20px', dir: 'row' }
+        right: { top: '120px', transform: 'none', left: 'auto', right: '5px', bottom: 'auto', dir: 'column' },
+        left:  { top: '120px', transform: 'none', left: '5px', right: 'auto', bottom: 'auto', dir: 'column' },
+        top:   { top: '20px', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: 'auto', dir: 'row' },
+        bottom:{ top: 'auto', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: '20px', dir: 'row' }
     };
     POSITIONS.forEach(pos => {
         let hasBtns = false; ordered.forEach(id => { if (id === 'profile') return; const cfg = settings.buttons[id]; if (cfg && typeof cfg === 'object' && cfg[pos]) hasBtns = true; });
