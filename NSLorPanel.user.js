@@ -18,7 +18,7 @@
     var anchorNext = null;
     var newsInitialized = false;
     var loadedIds = {};
-    var panelContainer = null;
+    var panelContainers = { right: null, left: null, top: null, bottom: null };
     var settingsBtn = null;
     var addCustomBtn = null;
     var allButtons = {};
@@ -28,13 +28,13 @@
     var pageLoadTime = Date.now();
 
     // Мобильные переменные
-    var isMobilePanelExpanded = false;
+    var isMobilePanelExpanded = { right: false, left: false, top: false, bottom: false };
     var touchStartY = 0;
     var touchStartX = 0;
     var touchMoved = false;
     var SWIPE_THRESHOLD = 40;
-    var mobileCollapsedContainer = null;
-    var mobileExpandedContainer = null;
+    var mobileCollapsedContainers = { right: null, left: null, top: null, bottom: null };
+    var mobileExpandedContainers = { right: null, left: null, top: null, bottom: null };
 
     function getDefaultSettings() {
         return {
@@ -47,24 +47,26 @@
                 orientation: 'vertical'
             },
             buttons: {
-                up: true,
-                forum: true,
-                tracker: true,
-                notifications: true,
-                saved: true,
-                myComment: true,
-                mention: true,
-                blacklist: true,
-                down: true
+                profile: { right: true, left: false, top: false, bottom: false },
+                up: { right: true, left: false, top: false, bottom: false },
+                forum: { right: true, left: false, top: false, bottom: false },
+                tracker: { right: true, left: false, top: false, bottom: false },
+                notifications: { right: true, left: false, top: false, bottom: false },
+                saved: { right: true, left: false, top: false, bottom: false },
+                myComment: { right: true, left: false, top: false, bottom: false },
+                mention: { right: true, left: false, top: false, bottom: false },
+                blacklist: { right: true, left: false, top: false, bottom: false },
+                down: { right: true, left: false, top: false, bottom: false },
+                help: { right: false, left: true, top: false, bottom: false }
             },
             customButtons: [],
-            buttonOrder: ['up', 'forum', 'tracker', 'notifications', 'saved', 'myComment', 'mention', 'blacklist', 'down']
+            buttonOrder: ['up', 'forum', 'tracker', 'notifications', 'saved', 'myComment', 'mention', 'blacklist', 'down', 'help']
         };
     }
 
     function getSettings() {
         try {
-            var saved = JSON.parse(localStorage.getItem('lor_panel_settings'));
+            var saved = JSON.parse(localStorage.getItem('lor_panel_settings_v2'));
             if (saved && typeof saved === 'object') {
                 var defaults = getDefaultSettings();
                 if (!saved.general) saved.general = defaults.general;
@@ -78,7 +80,11 @@
                 if (!saved.general.mobileScale || saved.general.mobileScale < 30 || saved.general.mobileScale > 300) saved.general.mobileScale = defaults.general.mobileScale;
                 if (!saved.general.orientation) saved.general.orientation = defaults.general.orientation;
                 for (var key in defaults.buttons) {
-                    if (saved.buttons[key] === undefined) saved.buttons[key] = defaults.buttons[key];
+                    if (saved.buttons[key] === undefined) {
+                        saved.buttons[key] = defaults.buttons[key];
+                    } else if (typeof saved.buttons[key] === 'boolean') {
+                        saved.buttons[key] = { right: saved.buttons[key], left: false, top: false, bottom: false };
+                    }
                 }
                 var orderChanged = false;
                 defaults.buttonOrder.forEach(function(k) {
@@ -89,13 +95,43 @@
                 });
                 if (orderChanged) saveSettings(saved);
                 return saved;
+            } else {
+                // Try old key
+                var oldSaved = JSON.parse(localStorage.getItem('lor_panel_settings'));
+                if (oldSaved && typeof oldSaved === 'object') {
+                    var migrated = migrateOldSettings(oldSaved);
+                    saveSettings(migrated);
+                    return migrated;
+                }
             }
         } catch(e) {}
         return getDefaultSettings();
     }
 
+    function migrateOldSettings(old) {
+        var defaults = getDefaultSettings();
+        var migrated = {
+            general: old.general || defaults.general,
+            buttons: {},
+            customButtons: old.customButtons || [],
+            buttonOrder: old.buttonOrder || defaults.buttonOrder.slice()
+        };
+        for (var key in defaults.buttons) {
+            if (old.buttons && old.buttons[key] !== undefined) {
+                if (typeof old.buttons[key] === 'boolean') {
+                    migrated.buttons[key] = { right: old.buttons[key], left: false, top: false, bottom: false };
+                } else {
+                    migrated.buttons[key] = old.buttons[key];
+                }
+            } else {
+                migrated.buttons[key] = defaults.buttons[key];
+            }
+        }
+        return migrated;
+    }
+
     function saveSettings(settings) {
-        localStorage.setItem('lor_panel_settings', JSON.stringify(settings));
+        localStorage.setItem('lor_panel_settings_v2', JSON.stringify(settings));
     }
 
     function getBlacklist() {
@@ -453,6 +489,209 @@
         return theme === 'black' || theme === 'tango';
     }
 
+    function highlightButton(btnId) {
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            var key = btnId + '_' + pos;
+            if (allButtons[key]) {
+                allButtons[key].style.background = '#4CAF50';
+                setTimeout(function() {
+                    if (allButtons[key]) {
+                        var colors = getThemeColors();
+                        allButtons[key].style.background = colors.btnBg;
+                    }
+                }, 3000);
+            }
+        });
+    }
+
+    function flashSavedButton(text, color) {
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            var key = 'saved_' + pos;
+            if (allButtons[key]) {
+                var btn = allButtons[key];
+                var originalText = btn.textContent;
+                btn.textContent = text;
+                btn.style.color = color;
+                setTimeout(function() {
+                    btn.textContent = originalText;
+                    btn.style.color = '';
+                }, 1500);
+            }
+        });
+    }
+
+    function showHelpModal() {
+        if (document.getElementById('lor-help-overlay')) return;
+        var isDark = isDarkTheme();
+        var settings = getSettings();
+        var modalScale = settings.general.modalScale / 100;
+
+        var overlay = document.createElement('div');
+        overlay.id = 'lor-help-overlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100010;display:flex;align-items:center;justify-content:center;';
+
+        var modal = document.createElement('div');
+        modal.style.cssText = 'background:' + (isDark ? '#0a0a14' : '#ffffff') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';padding:' + Math.round(24 * modalScale) + 'px;border-radius:' + Math.round(8 * modalScale) + 'px;width:' + Math.round(600 * modalScale) + 'px;max-height:80vh;color:' + (isDark ? '#ccc' : '#333') + ';font-family:Arial,sans-serif;font-size:' + Math.round(14 * modalScale) + 'px;box-shadow:0 0 30px rgba(0,0,0,' + (isDark ? '0.8' : '0.2') + ');display:flex;flex-direction:column;';
+
+        var header = document.createElement('div');
+        header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';';
+
+        var titleEl = document.createElement('div');
+        titleEl.textContent = '❓ Справка по панели NSLorPanel';
+        titleEl.style.cssText = 'font-size:' + Math.round(18 * modalScale) + 'px;font-weight:bold;';
+        header.appendChild(titleEl);
+
+        var closeBtn = document.createElement('div');
+        closeBtn.textContent = '✕';
+        closeBtn.style.cssText = 'cursor:pointer;font-size:' + Math.round(20 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';';
+        closeBtn.onclick = function() { overlay.remove(); };
+        header.appendChild(closeBtn);
+
+        modal.appendChild(header);
+
+        var content = document.createElement('div');
+        content.style.cssText = 'overflow-y:auto;flex:1;min-height:200px;padding-right:8px;';
+
+        var helpSections = [
+            {
+                title: '📌 Четыре панели',
+                content: 'Теперь доступно 4 независимые панели: <b>справа, слева, сверху и снизу</b>. ' +
+                         'Каждая кнопка может быть включена на любой комбинации панелей. ' +
+                         'Настройка производится во вкладке "Кнопки" (чекбоксы Справа/Слева/Сверху/Снизу). ' +
+                         'Панель не создаётся, если на ней нет активных кнопок (кроме профиля).'
+            },
+            {
+                title: '📱 Мобильный вид',
+                content: 'При включении мобильного вида панель сворачивается в три кнопки: ▲ 🔔 ▼. ' +
+                         '<b>Свайп вниз</b> по области панели — разворачивает все кнопки. ' +
+                         '<b>Свайп вверх</b> по любой иконке — сворачивает обратно. ' +
+                         'В мобильном виде работает отдельный масштаб.'
+            },
+            {
+                title: '📋 Кнопка "Форум"',
+                content: '<b>ЛКМ:</b> Переход на главную страницу форума.<br>' +
+                         '<b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком разделов форума. ' +
+                         'Для каждого раздела показывается количество новых тем за сутки. ' +
+                         'Если количество изменилось по сравнению с предыдущей проверкой, ' +
+                         'раздел подсвечивается зелёным и показывает количество новых тем.<br>' +
+                         '<b>ЛКМ по разделу:</b> Переход в раздел.<br>' +
+                         '<b>Колесо по разделу:</b> Открыть раздел в новой вкладке.'
+            },
+            {
+                title: '☰ Кнопка "Трекер"',
+                content: '<b>ЛКМ:</b> Переход на главную страницу трекера.<br>' +
+                         '<b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком последних тем трекера. ' +
+                         'Для каждой темы показывается количество сообщений. ' +
+                         'Если количество изменилось, тема подсвечивается зелёным ' +
+                         'и показывает количество новых сообщений.<br>' +
+                         '<b>ЛКМ по теме:</b> Переход в тему.<br>' +
+                         '<b>Колесо по теме:</b> Открыть тему в новой вкладке.'
+            },
+            {
+                title: '🔔 Кнопка "Уведомления"',
+                content: '<b>ЛКМ:</b> Переход на страницу уведомлений.<br>' +
+                         '<b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком всех уведомлений. ' +
+                         'Показываются категории (Новости, Форум, Трекер), теги и время.<br>' +
+                         '<b>ЛКМ по уведомлению:</b> Переход по ссылке.<br>' +
+                         '<b>Колесо по уведомлению:</b> Открыть в новой вкладке.<br>' +
+                         '<b>Цифра на кнопке:</b> Количество непрочитанных уведомлений.'
+            },
+            {
+                title: '💾 Кнопка "Сохраненные"',
+                content: '<b>ЛКМ:</b> Открывает модальное окно со списком сохранённых страниц. ' +
+                         'Для каждой страницы автоматически проверяется наличие новых комментариев. ' +
+                         'При обнаружении новых комментариев страница подсвечивается зелёным ' +
+                         'и показывает количество новых сообщений.<br>' +
+                         '<b>ПКМ (долгое нажатие):</b> Сохраняет текущую страницу. Запоминается URL, заголовок, ' +
+                         'количество комментариев и позиция скролла. ' +
+                         'При первом заходе на сохранённую страницу после перезагрузки ' +
+                         'автоматически восстанавливается позиция скролла. ' +
+                         'Позиция обновляется автоматически при скролле через 2 секунды после остановки.<br>' +
+                         '<b>ЛКМ по сохранённой странице:</b> Переход на страницу.<br>' +
+                         '<b>Колесо по сохранённой странице:</b> Открыть в новой вкладке.<br>' +
+                         '<b>ПКМ по сохранённой странице:</b> Удалить из списка.'
+            },
+            {
+                title: '💬 Кнопка "Мои сообщения"',
+                content: '<b>ЛКМ:</b> Прокручивает страницу к вашему последнему комментарию ' +
+                         'и подсвечивает его синей рамкой на 3 секунды.'
+            },
+            {
+                title: '📢 Кнопка "Упоминания"',
+                content: '<b>ЛКМ:</b> Прокручивает страницу к последнему упоминанию вашего ника ' +
+                         'и подсвечивает его оранжевой рамкой на 3 секунды.'
+            },
+            {
+                title: '🚫 Кнопка "Чёрный список"',
+                content: '<b>ЛКМ:</b> Открывает модальное окно управления чёрным списком авторов. ' +
+                         'Можно добавлять и удалять ники. Все новости и мини-новости от авторов ' +
+                         'из чёрного списка автоматически скрываются.<br>' +
+                         '<b>ПКМ (долгое нажатие) на странице новости:</b> Автоматически добавляет автора текущей новости в чёрный список.'
+            },
+            {
+                title: '❓ Кнопка "Справка"',
+                content: 'Открывает это окно справки. По умолчанию находится только на левой панели.'
+            },
+            {
+                title: '➕ Пользовательские кнопки',
+                content: 'Вы можете добавить свои кнопки с произвольными ссылками. ' +
+                         'Нажмите ПКМ на кнопку профиля, затем на "+" и введите URL, название и выберите иконку. ' +
+                         'Кнопка появится на панели. В настройках можно изменить порядок кнопок ' +
+                         'или удалить пользовательские.'
+            },
+            {
+                title: '👤 Кнопка "Профиль"',
+                content: '<b>ЛКМ:</b> Переход в ваш профиль.<br>' +
+                         '<b>ПКМ:</b> Показывает кнопку настроек (⚙) и кнопку добавления (+).'
+            },
+            {
+                title: '⚙ Настройки',
+                content: 'Кнопка настроек появляется при ПКМ на кнопку профиля. ' +
+                         'В настройках можно:<br>' +
+                         '• Включить мобильный вид со свайп-панелью<br>' +
+                         '• Включить/отключить отображение рамки панели<br>' +
+                         '• Настроить масштаб панели (30-200%)<br>' +
+                         '• Настроить масштаб мобильной панели (30-300%)<br>' +
+                         '• Настроить масштаб модальных окон (30-200%)<br>' +
+                         '• Выбрать, на каких панелях (справа/слева/сверху/снизу) отображать каждую кнопку<br>' +
+                         '• Изменить порядок кнопок (кнопка ^)<br>' +
+                         '• Удалить пользовательские кнопки (кнопка -)'
+            },
+            {
+                title: '🖱 Долгое нажатие мыши',
+                content: 'На десктопе: удержание левой кнопки мыши на любой иконке панели в течение 500 мс ' +
+                         'эмулирует нажатие правой кнопки мыши (контекстное меню / альтернативное действие). ' +
+                         'Если начать движение мыши во время удержания (более 5px), долгое нажатие отменяется.'
+            }
+        ];
+
+        helpSections.forEach(function(section) {
+            var sectionDiv = document.createElement('div');
+            sectionDiv.style.cssText = 'margin-bottom:20px;';
+
+            var sectionTitle = document.createElement('div');
+            sectionTitle.textContent = section.title;
+            sectionTitle.style.cssText = 'font-weight:bold;margin-bottom:6px;color:#4a90d9;font-size:' + Math.round(15 * modalScale) + 'px;';
+            sectionDiv.appendChild(sectionTitle);
+
+            var sectionContent = document.createElement('div');
+            sectionContent.innerHTML = section.content;
+            sectionContent.style.cssText = 'font-size:' + Math.round(13 * modalScale) + 'px;line-height:1.6;padding-left:12px;border-left:2px solid ' + (isDark ? '#2a2a3a' : '#e0e0e0') + ';';
+            sectionDiv.appendChild(sectionContent);
+
+            content.appendChild(sectionDiv);
+        });
+
+        modal.appendChild(content);
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        overlay.onclick = function(e) {
+            if (e.target === overlay) overlay.remove();
+        };
+    }
+
     function showSettingsModal() {
         if (document.getElementById('lor-settings-overlay')) return;
         var settings = getSettings();
@@ -464,7 +703,7 @@
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:' + (isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)') + ';z-index:100000;display:flex;align-items:center;justify-content:center;';
 
         var modal = document.createElement('div');
-        modal.style.cssText = 'background:' + (isDark ? '#0a0a14' : '#ffffff') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';padding:' + Math.round(24 * modalScale) + 'px;border-radius:' + Math.round(8 * modalScale) + 'px;width:' + Math.round(520 * modalScale) + 'px;color:' + (isDark ? '#ccc' : '#333') + ';font-family:Arial,sans-serif;font-size:' + Math.round(14 * modalScale) + 'px;box-shadow:0 0 30px rgba(0,0,0,' + (isDark ? '0.8' : '0.2') + ');max-height:90vh;display:flex;flex-direction:column;';
+        modal.style.cssText = 'background:' + (isDark ? '#0a0a14' : '#ffffff') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';padding:' + Math.round(24 * modalScale) + 'px;border-radius:' + Math.round(8 * modalScale) + 'px;width:' + Math.round(600 * modalScale) + 'px;color:' + (isDark ? '#ccc' : '#333') + ';font-family:Arial,sans-serif;font-size:' + Math.round(14 * modalScale) + 'px;box-shadow:0 0 30px rgba(0,0,0,' + (isDark ? '0.8' : '0.2') + ');max-height:90vh;display:flex;flex-direction:column;';
 
         var title = document.createElement('div');
         title.style.cssText = 'font-size:' + Math.round(18 * modalScale) + 'px;font-weight:bold;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';';
@@ -635,34 +874,145 @@
                 myComment: '💬 Мои сообщения',
                 mention: '📢 Упоминания',
                 blacklist: '🚫 Чёрный список',
-                down: '▼ Вниз'
+                down: '▼ Вниз',
+                help: '❓ Справка'
             };
 
             var allButtonIds = settings.buttonOrder.slice();
 
+            // Добавляем кнопки из settings.buttons, которых нет в buttonOrder
             for (var key in settings.buttons) {
-                if (allButtonIds.indexOf(key) === -1) {
+                if (allButtonIds.indexOf(key) === -1 && key !== 'profile') {
                     allButtonIds.push(key);
                 }
             }
 
+            // Добавляем кастомные кнопки
             settings.customButtons.forEach(function(cb) {
                 if (allButtonIds.indexOf(cb.id) === -1) {
                     allButtonIds.push(cb.id);
                 }
             });
 
+            // Добавляем стандартные кнопки, которых нет в buttonOrder
             for (var name in btnNames) {
                 if (allButtonIds.indexOf(name) === -1) {
                     allButtonIds.push(name);
                 }
             }
 
+            // Заголовок колонок
+            var headerDiv = document.createElement('div');
+            headerDiv.style.cssText = 'display:flex;align-items:center;margin-bottom:8px;padding:0 8px;font-weight:bold;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#aaa' : '#666') + ';';
+
+            var nameHeader = document.createElement('span');
+            nameHeader.textContent = 'Кнопка';
+            nameHeader.style.cssText = 'flex:1;';
+            headerDiv.appendChild(nameHeader);
+
+            var posLabels = ['Справа', 'Слева', 'Сверху', 'Снизу'];
+            var posKeys = ['right', 'left', 'top', 'bottom'];
+
+            posKeys.forEach(function(pos, index) {
+                var posSpan = document.createElement('span');
+                posSpan.textContent = posLabels[index];
+                posSpan.style.cssText = 'width:55px;text-align:center;font-size:' + Math.round(11 * modalScale) + 'px;';
+                headerDiv.appendChild(posSpan);
+            });
+
+            // Место для кнопок действий (^ и -)
+            var actionsHeader = document.createElement('span');
+            actionsHeader.style.cssText = 'width:60px;text-align:center;font-size:' + Math.round(11 * modalScale) + 'px;';
+            actionsHeader.textContent = 'Действ.';
+            headerDiv.appendChild(actionsHeader);
+
+            content.appendChild(headerDiv);
+
+            // Разделительная линия
+            var separator = document.createElement('div');
+            separator.style.cssText = 'border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';margin-bottom:8px;';
+            content.appendChild(separator);
+
+            // ========== Кнопка "Профиль" (специальная обработка) ==========
+            var profileConfig = settings.buttons['profile'];
+            if (!profileConfig || typeof profileConfig !== 'object') {
+                profileConfig = { right: true, left: false, top: false, bottom: false };
+                settings.buttons['profile'] = profileConfig;
+            }
+
+            // Определяем, какая позиция выбрана для профиля
+            var profilePosition = 'right';
+            posKeys.forEach(function(pos) {
+                if (profileConfig[pos]) {
+                    profilePosition = pos;
+                }
+            });
+
+            var profileDiv = document.createElement('div');
+            profileDiv.style.cssText = 'margin-bottom:10px;display:flex;align-items:center;gap:4px;padding:8px 8px;border-radius:4px;background:' + (isDark ? '#1a1a2e' : '#f0f4f8') + ';border:1px solid #4a90d9;';
+
+            var profileLabel = document.createElement('label');
+            profileLabel.style.cssText = 'flex:1;display:flex;align-items:center;gap:4px;font-weight:bold;';
+
+            var profileSpan = document.createElement('span');
+            profileSpan.textContent = '👤 Профиль';
+            profileSpan.style.cssText = 'color:#4a90d9;';
+            profileLabel.appendChild(profileSpan);
+            profileDiv.appendChild(profileLabel);
+
+            // Радиокнопки для выбора позиции профиля
+            posKeys.forEach(function(pos, index) {
+                var radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = 'lor-profile-position';
+                radio.className = 'lor-setting-profile-radio';
+                radio.setAttribute('data-pos', pos);
+                radio.checked = (pos === profilePosition);
+                radio.style.cssText = 'width:14px;height:14px;margin:0;cursor:pointer;accent-color:#4a90d9;';
+                radio.title = 'Профиль ' + posLabels[index];
+
+                radio.onchange = function() {
+                    if (this.checked) {
+                        // Сбрасываем все позиции профиля
+                        posKeys.forEach(function(p) {
+                            settings.buttons['profile'][p] = false;
+                        });
+                        // Устанавливаем выбранную позицию
+                        settings.buttons['profile'][pos] = true;
+                    }
+                };
+
+                var radioWrapper = document.createElement('div');
+                radioWrapper.style.cssText = 'width:55px;display:flex;justify-content:center;';
+                radioWrapper.appendChild(radio);
+                profileDiv.appendChild(radioWrapper);
+            });
+
+            // Пустое место для действий (профиль нельзя удалить)
+            var profileActions = document.createElement('div');
+            profileActions.style.cssText = 'width:60px;';
+            profileDiv.appendChild(profileActions);
+
+            content.appendChild(profileDiv);
+
+            // Подсказка для профиля
+            var profileHint = document.createElement('div');
+            profileHint.style.cssText = 'margin-bottom:12px;padding:4px 8px;font-size:' + Math.round(11 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';font-style:italic;';
+            profileHint.textContent = 'Профиль всегда отображается ровно на одной панели';
+            content.appendChild(profileHint);
+
+            // Разделитель после профиля
+            var separator2 = document.createElement('div');
+            separator2.style.cssText = 'border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';margin-bottom:10px;';
+            content.appendChild(separator2);
+
+            // ========== Остальные кнопки ==========
             allButtonIds.forEach(function(btnId) {
                 if (btnId === 'profile') return;
 
                 var isCustom = btnId.startsWith('custom_');
                 var customBtn = null;
+
                 if (isCustom) {
                     customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; });
                     if (!customBtn) return;
@@ -670,21 +1020,23 @@
                     return;
                 }
 
-                var isEnabled = settings.buttons[btnId] !== false;
+                // Получаем или создаём конфигурацию кнопки
+                var btnConfig = settings.buttons[btnId];
+                if (!btnConfig || typeof btnConfig !== 'object') {
+                    btnConfig = { right: false, left: false, top: false, bottom: false };
+                    settings.buttons[btnId] = btnConfig;
+                }
+
+                // Проверяем, активна ли кнопка хоть где-то
+                var isActive = btnConfig.right || btnConfig.left || btnConfig.top || btnConfig.bottom;
 
                 var div = document.createElement('div');
-                div.style.cssText = 'margin-bottom:12px;display:flex;align-items:center;gap:8px;';
+                div.style.cssText = 'margin-bottom:8px;display:flex;align-items:center;gap:4px;padding:6px 8px;border-radius:4px;' +
+                    (isActive ? '' : 'opacity:0.7;');
 
+                // Название кнопки
                 var label = document.createElement('label');
-                label.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;';
-
-                var cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.className = 'lor-setting-btn';
-                cb.setAttribute('data-key', btnId);
-                cb.checked = isEnabled;
-                cb.style.cssText = 'width:16px;height:16px;';
-                label.appendChild(cb);
+                label.style.cssText = 'flex:1;display:flex;align-items:center;gap:4px;cursor:pointer;';
 
                 var span = document.createElement('span');
                 if (isCustom && customBtn) {
@@ -692,21 +1044,65 @@
                 } else {
                     span.textContent = btnNames[btnId] || btnId;
                 }
-                if (!isEnabled) {
-                    span.style.opacity = '0.5';
+
+                if (!isActive) {
                     span.style.textDecoration = 'line-through';
                 }
-                label.appendChild(span);
 
+                label.appendChild(span);
                 div.appendChild(label);
 
+                // Чекбоксы для каждой позиции
+                posKeys.forEach(function(pos, index) {
+                    var cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.className = 'lor-setting-btn';
+                    cb.setAttribute('data-key', btnId);
+                    cb.setAttribute('data-pos', pos);
+                    cb.checked = btnConfig[pos] || false;
+                    cb.style.cssText = 'width:14px;height:14px;margin:0;cursor:pointer;';
+                    cb.title = posLabels[index];
+
+                    // Автоматически обновляем визуал при изменении
+                    cb.onchange = function() {
+                        // Обновляем конфигурацию в реальном времени
+                        settings.buttons[btnId][pos] = this.checked;
+
+                        // Проверяем, активна ли кнопка теперь
+                        var nowActive = settings.buttons[btnId].right ||
+                                        settings.buttons[btnId].left ||
+                                        settings.buttons[btnId].top ||
+                                        settings.buttons[btnId].bottom;
+
+                        if (nowActive) {
+                            div.style.opacity = '1';
+                            span.style.textDecoration = 'none';
+                        } else {
+                            div.style.opacity = '0.7';
+                            span.style.textDecoration = 'line-through';
+                        }
+                    };
+
+                    var cbWrapper = document.createElement('div');
+                    cbWrapper.style.cssText = 'width:55px;display:flex;justify-content:center;';
+                    cbWrapper.appendChild(cb);
+                    div.appendChild(cbWrapper);
+                });
+
+                // Кнопки действий (поднять/удалить)
                 var actionsDiv = document.createElement('div');
-                actionsDiv.style.cssText = 'display:flex;gap:4px;';
+                actionsDiv.style.cssText = 'width:60px;display:flex;gap:4px;justify-content:center;';
 
                 var upBtn = document.createElement('button');
                 upBtn.textContent = '^';
                 upBtn.title = 'Поднять выше';
                 upBtn.style.cssText = 'padding:2px 8px;background:' + (isDark ? '#1a2a3a' : '#e0e0e0') + ';color:' + (isDark ? '#aaa' : '#666') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';border-radius:3px;cursor:pointer;font-size:' + Math.round(12 * modalScale) + 'px;line-height:1;';
+                upBtn.onmouseenter = function() {
+                    this.style.background = isDark ? '#2a3a4a' : '#d0d0d0';
+                };
+                upBtn.onmouseleave = function() {
+                    this.style.background = isDark ? '#1a2a3a' : '#e0e0e0';
+                };
                 upBtn.onclick = function(e) {
                     e.stopPropagation();
                     moveButtonUp(btnId, settings);
@@ -715,11 +1111,18 @@
                 };
                 actionsDiv.appendChild(upBtn);
 
+                // Кнопка удаления только для кастомных кнопок
                 if (isCustom) {
                     var delBtn = document.createElement('button');
-                    delBtn.textContent = '-';
+                    delBtn.textContent = '×';
                     delBtn.title = 'Удалить кнопку';
                     delBtn.style.cssText = 'padding:2px 8px;background:#5a1a1a;color:#ddd;border:1px solid #8a2a2a;border-radius:3px;cursor:pointer;font-size:' + Math.round(12 * modalScale) + 'px;line-height:1;';
+                    delBtn.onmouseenter = function() {
+                        this.style.background = '#7a2a2a';
+                    };
+                    delBtn.onmouseleave = function() {
+                        this.style.background = '#5a1a1a';
+                    };
                     delBtn.onclick = function(e) {
                         e.stopPropagation();
                         if (confirm('Удалить кнопку "' + customBtn.title + '"?')) {
@@ -736,12 +1139,25 @@
                 div.appendChild(actionsDiv);
                 content.appendChild(div);
             });
+
+            // Подсказка внизу
+            var hint = document.createElement('div');
+            hint.style.cssText = 'margin-top:12px;padding:8px;font-size:' + Math.round(11 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';';
+            hint.innerHTML = 'Отметьте чекбоксами, на каких панелях отображать кнопки.<br>Профиль всегда на одной панели (выберите радиокнопкой).';
+            content.appendChild(hint);
         }
 
         function renderHelpTab() {
             content.innerHTML = '';
 
             var helpSections = [
+                {
+                    title: '📌 Четыре панели',
+                    content: 'Теперь доступно 4 независимые панели: <b>справа, слева, сверху и снизу</b>. ' +
+                             'Каждая кнопка может быть включена на любой комбинации панелей. ' +
+                             'Настройка производится во вкладке "Кнопки" (чекбоксы Справа/Слева/Сверху/Снизу). ' +
+                             'Панель не создаётся, если на ней нет активных кнопок (кроме профиля).'
+                },
                 {
                     title: '📱 Мобильный вид',
                     content: 'При включении мобильного вида панель сворачивается в три кнопки: ▲ 🔔 ▼. ' +
@@ -752,7 +1168,7 @@
                 {
                     title: '📋 Кнопка "Форум"',
                     content: '<b>ЛКМ:</b> Переход на главную страницу форума.<br>' +
-                             '<b>ПКМ:</b> Открывает модальное окно со списком разделов форума. ' +
+                             '<b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком разделов форума. ' +
                              'Для каждого раздела показывается количество новых тем за сутки. ' +
                              'Если количество изменилось по сравнению с предыдущей проверкой, ' +
                              'раздел подсвечивается зелёным и показывает количество новых тем.<br>' +
@@ -762,7 +1178,7 @@
                 {
                     title: '☰ Кнопка "Трекер"',
                     content: '<b>ЛКМ:</b> Переход на главную страницу трекера.<br>' +
-                             '<b>ПКМ:</b> Открывает модальное окно со списком последних тем трекера. ' +
+                             '<b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком последних тем трекера. ' +
                              'Для каждой темы показывается количество сообщений. ' +
                              'Если количество изменилось, тема подсвечивается зелёным ' +
                              'и показывает количество новых сообщений.<br>' +
@@ -772,7 +1188,7 @@
                 {
                     title: '🔔 Кнопка "Уведомления"',
                     content: '<b>ЛКМ:</b> Переход на страницу уведомлений.<br>' +
-                             '<b>ПКМ:</b> Открывает модальное окно со списком всех уведомлений. ' +
+                             '<b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком всех уведомлений. ' +
                              'Показываются категории (Новости, Форум, Трекер), теги и время.<br>' +
                              '<b>ЛКМ по уведомлению:</b> Переход по ссылке.<br>' +
                              '<b>Колесо по уведомлению:</b> Открыть в новой вкладке.<br>' +
@@ -784,7 +1200,7 @@
                              'Для каждой страницы автоматически проверяется наличие новых комментариев. ' +
                              'При обнаружении новых комментариев страница подсвечивается зелёным ' +
                              'и показывает количество новых сообщений.<br>' +
-                             '<b>ПКМ:</b> Сохраняет текущую страницу. Запоминается URL, заголовок, ' +
+                             '<b>ПКМ (долгое нажатие):</b> Сохраняет текущую страницу. Запоминается URL, заголовок, ' +
                              'количество комментариев и позиция скролла. ' +
                              'При первом заходе на сохранённую страницу после перезагрузки ' +
                              'автоматически восстанавливается позиция скролла. ' +
@@ -808,7 +1224,11 @@
                     content: '<b>ЛКМ:</b> Открывает модальное окно управления чёрным списком авторов. ' +
                              'Можно добавлять и удалять ники. Все новости и мини-новости от авторов ' +
                              'из чёрного списка автоматически скрываются.<br>' +
-                             '<b>ПКМ (на странице новости):</b> Автоматически добавляет автора текущей новости в чёрный список.'
+                             '<b>ПКМ (долгое нажатие) на странице новости:</b> Автоматически добавляет автора текущей новости в чёрный список.'
+                },
+                {
+                    title: '❓ Кнопка "Справка"',
+                    content: 'Открывает окно справки по всем функциям. По умолчанию находится только на левой панели.'
                 },
                 {
                     title: '➕ Пользовательские кнопки',
@@ -832,7 +1252,7 @@
                              '• Настроить масштаб панели (30-200%)<br>' +
                              '• Настроить масштаб мобильной панели (30-300%)<br>' +
                              '• Настроить масштаб модальных окон (30-200%)<br>' +
-                             '• Выбрать, какие кнопки отображать на панели<br>' +
+                             '• Выбрать, на каких панелях (справа/слева/сверху/снизу) отображать каждую кнопку<br>' +
                              '• Изменить порядок кнопок (кнопка ^)<br>' +
                              '• Удалить пользовательские кнопки (кнопка -)'
                 },
@@ -854,6 +1274,12 @@
                     content: 'Панель и все модальные окна автоматически подстраиваются под текущую ' +
                              'тему сайта (black, tango, tango-light, white2, waltz, zomg_ponies). ' +
                              'Цвета фона, текста и границ соответствуют выбранной теме.'
+                },
+                {
+                    title: '🖱 Долгое нажатие мыши',
+                    content: 'На десктопе: удержание левой кнопки мыши на любой иконке панели в течение 500 мс ' +
+                             'эмулирует нажатие правой кнопки мыши (контекстное меню / альтернативное действие). ' +
+                             'Если начать движение мыши во время удержания (более 5px), долгое нажатие отменяется.'
                 }
             ];
 
@@ -876,7 +1302,7 @@
 
             var footerHelp = document.createElement('div');
             footerHelp.style.cssText = 'margin-top:' + Math.round(20 * modalScale) + 'px;padding-top:' + Math.round(12 * modalScale) + 'px;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;';
-            footerHelp.textContent = 'NSLorPanel v2.0 • Все данные хранятся в localStorage вашего браузера';
+            footerHelp.textContent = 'NSLorPanel v4.0 • Все данные хранятся в localStorage вашего браузера';
             content.appendChild(footerHelp);
         }
 
@@ -961,13 +1387,15 @@
                 if (mmval >= 30 && mmval <= 200) settings.general.modalScale = mmval;
             }
 
-            if (currentTab === 'buttons' || document.querySelector('.lor-setting-btn')) {
-                var btnChecks = document.querySelectorAll('.lor-setting-btn');
-                btnChecks.forEach(function(cb) {
-                    var key = cb.getAttribute('data-key');
-                    settings.buttons[key] = cb.checked;
-                });
-            }
+            var btnChecks = document.querySelectorAll('.lor-setting-btn');
+            btnChecks.forEach(function(cb) {
+                var key = cb.getAttribute('data-key');
+                var pos = cb.getAttribute('data-pos');
+                if (!settings.buttons[key] || typeof settings.buttons[key] !== 'object') {
+                    settings.buttons[key] = { right: false, left: false, top: false, bottom: false };
+                }
+                settings.buttons[key][pos] = cb.checked;
+            });
 
             saveSettings(settings);
             overlay.remove();
@@ -1037,7 +1465,7 @@
                 title: title,
                 icon: icon
             });
-            settings.buttons[customId] = true;
+            settings.buttons[customId] = { right: true, left: false, top: false, bottom: false };
             if (settings.buttonOrder.indexOf(customId) === -1) {
                 settings.buttonOrder.push(customId);
             }
@@ -1124,63 +1552,209 @@
         btn.textContent = text;
         btn.title = title;
         btn.style.cssText = 'width:' + size + 'px;height:' + size + 'px;background:' + colors.btnBg + ';color:' + colors.btnColor + ';border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:' + fontSize + 'px;user-select:none;opacity:0.7;position:relative;' + (marginBottom ? 'margin-bottom:30px;' : '');
-        btn.onmouseenter = function() { this.style.opacity = '1'; this.style.background = colors.btnBgHover; };
-        btn.onmouseleave = function() { this.style.opacity = '0.7'; this.style.background = colors.btnBg; };
+
+        // Флаг для предотвращения клика после contextmenu
+        btn._contextMenuJustFired = false;
+
+        btn.onmouseenter = function() {
+            this.style.opacity = '1';
+            this.style.background = colors.btnBgHover;
+        };
+
+        btn.onmouseleave = function() {
+            this.style.opacity = '0.7';
+            this.style.background = colors.btnBg;
+            // Сбрасываем состояние при уходе мыши
+            clearTimeout(btn._longPressTimer);
+            btn._longPressTriggered = false;
+            btn._contextMenuJustFired = false;
+        };
+
+        // === Долгое нажатие мыши (десктоп) ===
+        btn._longPressTimer = null;
+        btn._longPressTriggered = false;
+        var mouseStartX = 0;
+        var mouseStartY = 0;
+
+        btn.onmousedown = function(e) {
+            if (e.button !== 0) {
+                // Если это ПКМ (button === 2) - сразу ставим флаг
+                if (e.button === 2) {
+                    btn._contextMenuJustFired = true;
+                    setTimeout(function() {
+                        btn._contextMenuJustFired = false;
+                    }, 300);
+                }
+                return;
+            }
+
+            btn._longPressTriggered = false;
+            btn._contextMenuJustFired = false;
+            mouseStartX = e.clientX;
+            mouseStartY = e.clientY;
+
+            // Запускаем таймер долгого нажатия
+            btn._longPressTimer = setTimeout(function() {
+                btn._longPressTriggered = true;
+                btn._contextMenuJustFired = true;
+
+                // Создаём и диспатчим событие contextmenu
+                var evt = new MouseEvent('contextmenu', {
+                    bubbles: true,
+                    cancelable: true,
+                    button: 2,
+                    clientX: mouseStartX,
+                    clientY: mouseStartY
+                });
+                btn.dispatchEvent(evt);
+
+                // Сбрасываем флаг через некоторое время
+                setTimeout(function() {
+                    btn._contextMenuJustFired = false;
+                    btn._longPressTriggered = false;
+                }, 300);
+            }, 500);
+        };
+
+        btn.onmouseup = function(e) {
+            if (btn._longPressTriggered || btn._contextMenuJustFired) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                clearTimeout(btn._longPressTimer);
+                return false;
+            }
+
+            clearTimeout(btn._longPressTimer);
+        };
+
+        btn.onmousemove = function(e) {
+            if (btn._longPressTimer && (Math.abs(e.clientX - mouseStartX) + Math.abs(e.clientY - mouseStartY) > 5)) {
+                clearTimeout(btn._longPressTimer);
+                btn._longPressTimer = null;
+                btn._longPressTriggered = false;
+            }
+        };
+
+        // Перехватываем ВСЕ contextmenu события на кнопке
+        btn.addEventListener('contextmenu', function(e) {
+            btn._contextMenuJustFired = true;
+            setTimeout(function() {
+                btn._contextMenuJustFired = false;
+            }, 300);
+        });
+
+        // Основной обработчик клика с проверкой флага
+        btn.onclick = function(e) {
+            // Если только что было contextmenu (ПКМ или долгое нажатие) - игнорируем клик
+            if (btn._contextMenuJustFired) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                btn._contextMenuJustFired = false;
+                return false;
+            }
+
+            // Обычный клик
+            if (callback) {
+                callback(e);
+            }
+        };
+
+        // Дополнительный перехватчик на фазе захвата для гарантии
+        btn.addEventListener('click', function(e) {
+            if (btn._contextMenuJustFired) {
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                btn._contextMenuJustFired = false;
+            }
+        }, true);
+
+        // === Тач-обработчики (мобильные) ===
+        btn._touchLongPressTriggered = false;
 
         btn.ontouchstart = function(e) {
             this.style.opacity = '1';
             this.style.background = colors.btnBgHover;
+            btn._touchLongPressTriggered = false;
+            btn._contextMenuJustFired = false;
 
             var self = this;
-            // Сохраняем координаты начала касания
             var startX = e.touches[0].clientX;
             var startY = e.touches[0].clientY;
 
-            // Запускаем таймер долгого нажатия
             self._longPressTimer = setTimeout(function() {
+                self._touchLongPressTriggered = true;
+                btn._contextMenuJustFired = true;
+
                 var event = new MouseEvent('contextmenu', {
                     bubbles: true,
                     cancelable: true,
                     button: 2
                 });
                 self.dispatchEvent(event);
+
+                setTimeout(function() {
+                    btn._contextMenuJustFired = false;
+                    self._touchLongPressTriggered = false;
+                }, 300);
             }, 500);
 
-            // Глобальный обработчик движения для сброса таймера
             self._moveHandler = function(moveEvent) {
                 if (moveEvent.touches.length === 1) {
                     var deltaX = Math.abs(moveEvent.touches[0].clientX - startX);
                     var deltaY = Math.abs(moveEvent.touches[0].clientY - startY);
                     if (deltaX > 5 || deltaY > 5) {
                         clearTimeout(self._longPressTimer);
+                        self._touchLongPressTriggered = false;
                         document.removeEventListener('touchmove', self._moveHandler);
                     }
                 }
             };
             document.addEventListener('touchmove', self._moveHandler, { passive: true });
 
-            // Глобальный обработчик окончания касания для очистки
-            self._endHandler = function() {
+            self._endHandler = function(endEvent) {
                 clearTimeout(self._longPressTimer);
                 document.removeEventListener('touchmove', self._moveHandler);
                 document.removeEventListener('touchend', self._endHandler);
+
+                // Если было долгое нажатие - предотвращаем последующий клик
+                if (self._touchLongPressTriggered) {
+                    if (endEvent) {
+                        endEvent.preventDefault();
+                        endEvent.stopPropagation();
+                    }
+                    setTimeout(function() {
+                        self._touchLongPressTriggered = false;
+                        btn._contextMenuJustFired = false;
+                    }, 300);
+                }
             };
             document.addEventListener('touchend', self._endHandler, { once: true });
         };
 
-        btn.ontouchend = function() {
+        btn.ontouchend = function(e) {
             this.style.opacity = '0.7';
             this.style.background = colors.btnBg;
             clearTimeout(this._longPressTimer);
+
+            if (this._touchLongPressTriggered || btn._contextMenuJustFired) {
+                e.preventDefault();
+                e.stopPropagation();
+                this._touchLongPressTriggered = false;
+                btn._contextMenuJustFired = false;
+                return false;
+            }
         };
 
         btn.ontouchcancel = function() {
             this.style.opacity = '0.7';
             this.style.background = colors.btnBg;
             clearTimeout(this._longPressTimer);
+            this._touchLongPressTriggered = false;
+            btn._contextMenuJustFired = false;
         };
 
-        btn.onclick = callback;
         return btn;
     }
 
@@ -1436,14 +2010,8 @@
 
                 saveForumCache(cache);
 
-                if (hasChanges && allButtons['forum']) {
-                    allButtons['forum'].style.background = '#4CAF50';
-                    setTimeout(function() {
-                        if (allButtons['forum']) {
-                            var colors = getThemeColors();
-                            allButtons['forum'].style.background = colors.btnBg;
-                        }
-                    }, 3000);
+                if (hasChanges) {
+                    highlightButton('forum');
                 }
             });
     }
@@ -1632,14 +2200,8 @@
 
                 saveTrackerCache(newCache);
 
-                if (hasChanges && allButtons['tracker']) {
-                    allButtons['tracker'].style.background = '#4CAF50';
-                    setTimeout(function() {
-                        if (allButtons['tracker']) {
-                            var colors = getThemeColors();
-                            allButtons['tracker'].style.background = colors.btnBg;
-                        }
-                    }, 3000);
+                if (hasChanges) {
+                    highlightButton('tracker');
                 }
             });
     }
@@ -1829,8 +2391,6 @@
         var currentCommentCount = getCommentCount();
         var currentScrollPosition = window.pageYOffset || document.documentElement.scrollTop;
 
-        var savedBtn = allButtons['saved'];
-
         if (foundIndex !== -1) {
             savedPages[foundIndex].commentCount = currentCommentCount;
             savedPages[foundIndex].scrollPosition = currentScrollPosition;
@@ -1838,15 +2398,7 @@
             saveSavedPages(savedPages);
             currentPageSaved = true;
 
-            if (savedBtn) {
-                var originalText = savedBtn.textContent;
-                savedBtn.textContent = '↻';
-                savedBtn.style.color = '#4a90d9';
-                setTimeout(function() {
-                    savedBtn.textContent = originalText;
-                    savedBtn.style.color = '';
-                }, 1500);
-            }
+            flashSavedButton('↻', '#4a90d9');
 
             sessionStorage.removeItem('scroll_restored_' + pageId);
         } else {
@@ -1861,15 +2413,7 @@
             saveSavedPages(savedPages);
             currentPageSaved = true;
 
-            if (savedBtn) {
-                var originalText2 = savedBtn.textContent;
-                savedBtn.textContent = '✓';
-                savedBtn.style.color = '#4CAF50';
-                setTimeout(function() {
-                    savedBtn.textContent = originalText2;
-                    savedBtn.style.color = '';
-                }, 1500);
-            }
+            flashSavedButton('✓', '#4CAF50');
         }
     }
 
@@ -2026,28 +2570,29 @@
 
     // === МОБИЛЬНАЯ ПАНЕЛЬ ===
 
-    function expandMobilePanel() {
-        if (isMobilePanelExpanded) return;
-        isMobilePanelExpanded = true;
+    function expandMobilePanel(pos) {
+        if (isMobilePanelExpanded[pos]) return;
+        isMobilePanelExpanded[pos] = true;
 
-        if (mobileCollapsedContainer) {
-            mobileCollapsedContainer.style.display = 'none';
+        if (mobileCollapsedContainers[pos]) {
+            mobileCollapsedContainers[pos].style.display = 'none';
         }
-        if (mobileExpandedContainer) {
-            mobileExpandedContainer.style.display = 'flex';
-            mobileExpandedContainer.scrollTop = 0;
+        if (mobileExpandedContainers[pos]) {
+            mobileExpandedContainers[pos].style.display = 'flex';
+            mobileExpandedContainers[pos].scrollTop = 0;
+            mobileExpandedContainers[pos].scrollLeft = 0;
         }
     }
 
-    function collapseMobilePanel() {
-        if (!isMobilePanelExpanded) return;
-        isMobilePanelExpanded = false;
+    function collapseMobilePanel(pos) {
+        if (!isMobilePanelExpanded[pos]) return;
+        isMobilePanelExpanded[pos] = false;
 
-        if (mobileExpandedContainer) {
-            mobileExpandedContainer.style.display = 'none';
+        if (mobileExpandedContainers[pos]) {
+            mobileExpandedContainers[pos].style.display = 'none';
         }
-        if (mobileCollapsedContainer) {
-            mobileCollapsedContainer.style.display = 'flex';
+        if (mobileCollapsedContainers[pos]) {
+            mobileCollapsedContainers[pos].style.display = 'flex';
         }
     }
 
@@ -2059,83 +2604,16 @@
         var gap = Math.round(8 * mobileScale);
         var padding = Math.round(8 * mobileScale);
 
-        if (mobileCollapsedContainer) mobileCollapsedContainer.remove();
-        if (mobileExpandedContainer) mobileExpandedContainer.remove();
+        // Очищаем старые панели
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            if (mobileCollapsedContainers[pos]) { mobileCollapsedContainers[pos].remove(); mobileCollapsedContainers[pos] = null; }
+            if (mobileExpandedContainers[pos]) { mobileExpandedContainers[pos].remove(); mobileExpandedContainers[pos] = null; }
+            isMobilePanelExpanded[pos] = false;
+        });
 
         settingsBtn = null;
         addCustomBtn = null;
         allButtons = {};
-
-        mobileCollapsedContainer = document.createElement('div');
-        mobileCollapsedContainer.className = 'lor-mobile-collapsed';
-        mobileCollapsedContainer.style.cssText = 'position:fixed !important;z-index:9999 !important;display:flex !important;flex-direction:column !important;gap:' + gap + 'px !important;';
-
-        if (settings.general.showBorder) {
-            mobileCollapsedContainer.style.border = '1px solid ' + colors.borderColor;
-            mobileCollapsedContainer.style.borderRadius = '12px';
-            mobileCollapsedContainer.style.padding = padding + 'px';
-        }
-
-        var upBtn = createButton('▲', 'Наверх (долгое нажатие - настройки)', function() {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }, false, settings.general.mobileScale);
-        upBtn.style.position = 'relative';
-        upBtn.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            showExtraButtons(upBtn);
-        });
-        mobileCollapsedContainer.appendChild(upBtn);
-
-        var notifBtn = createButton('🔔', 'Уведомления (долгое нажатие - список)', function(e) {
-            if (e && e.button === 0) location.href = 'https://www.linux.org.ru/notifications';
-        }, false, settings.general.mobileScale);
-        notifBtn.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            showNotificationsModal();
-        });
-        mobileCollapsedContainer.appendChild(notifBtn);
-        if (settings.buttons['notifications']) {
-            updateNotificationBadge(notifBtn);
-        }
-
-        var downBtn = createButton('▼', 'Вниз (долгое нажатие - настройки)', function() {
-            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-        }, false, settings.general.mobileScale);
-        downBtn.style.position = 'relative';
-        downBtn.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            showExtraButtons(downBtn);
-        });
-        mobileCollapsedContainer.appendChild(downBtn);
-
-        mobileExpandedContainer = document.createElement('div');
-        mobileExpandedContainer.className = 'lor-mobile-expanded';
-        mobileExpandedContainer.style.cssText = 'position:fixed !important;z-index:9999 !important;display:none !important;flex-direction:column !important;gap:' + gap + 'px !important;' +
-            'max-height:' + Math.round(window.innerHeight * 0.7) + 'px !important;' +
-            'overflow-y:auto !important;' +
-            'scrollbar-width:thin !important;' +
-            'scrollbar-color:' + (isDarkTheme() ? '#444 #1a1a2e' : '#ccc #f0f0f0') + ' !important;' +
-            '-webkit-overflow-scrolling:touch !important;';
-
-        if (settings.general.showBorder) {
-            mobileExpandedContainer.style.border = '1px solid ' + colors.borderColor;
-            mobileExpandedContainer.style.borderRadius = '12px';
-            mobileExpandedContainer.style.padding = padding + 'px';
-        }
-
-        var profileBtn = createButton('👤', 'Профиль (долгое нажатие - настройки)', function(e) {
-            location.href = getProfileUrl();
-        }, true, settings.general.mobileScale);
-        profileBtn.style.position = 'relative';
-        profileBtn.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            showExtraButtons(profileBtn);
-        });
-        mobileExpandedContainer.appendChild(profileBtn);
 
         var buttonDefs = {
             'up': { text: '▲', title: 'Наверх (долгое нажатие - настройки)', action: function() { window.scrollTo({ top: 0, behavior: 'smooth' }); }, showSettings: true },
@@ -2146,72 +2624,238 @@
             'myComment': { text: '💬', title: 'К моему последнему сообщению', action: goToMyLastComment },
             'mention': { text: '📢', title: 'К последнему упоминанию меня', action: goToLastMention },
             'blacklist': { text: '🚫', title: 'Чёрный список (долгое нажатие - добавить автора)', action: showBlacklistModal, longPressAction: 'blacklist' },
-            'down': { text: '▼', title: 'Вниз (долгое нажатие - настройки)', action: function() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, showSettings: true }
+            'down': { text: '▼', title: 'Вниз (долгое нажатие - настройки)', action: function() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, showSettings: true },
+            'help': { text: '❓', title: 'Справка', action: function() { showHelpModal(); } }
         };
 
         var orderedButtons = getOrderedButtons(settings);
 
-        orderedButtons.forEach(function(btnId) {
-            if (btnId === 'profile') return;
+        // Определяем, на какой панели должен быть профиль
+        var profileConfig = settings.buttons['profile'];
+        if (!profileConfig || typeof profileConfig !== 'object') {
+            profileConfig = { right: true, left: false, top: false, bottom: false };
+            settings.buttons['profile'] = profileConfig;
+        }
 
-            var isCustom = btnId.startsWith('custom_');
-            if (isCustom) {
-                var customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; });
-                if (customBtn && settings.buttons[btnId]) {
-                    var btn = createButton(customBtn.icon, customBtn.title, function() {
-                        location.href = customBtn.url;
-                    }, false, settings.general.mobileScale);
-                    mobileExpandedContainer.appendChild(btn);
-                    allButtons[btnId] = btn;
+        var profilePosition = 'right';
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            if (profileConfig[pos]) {
+                profilePosition = pos;
+            }
+        });
+
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            var hasButtons = false;
+            orderedButtons.forEach(function(btnId) {
+                if (btnId === 'profile') return;
+                var btnConfig = settings.buttons[btnId];
+                if (btnConfig && typeof btnConfig === 'object' && btnConfig[pos]) {
+                    hasButtons = true;
                 }
-            } else if (buttonDefs[btnId] && settings.buttons[btnId]) {
-                var def = buttonDefs[btnId];
-                var btn = createButton(def.text, def.title, function(e) {
-                    if (btnId === 'forum' || btnId === 'tracker' || btnId === 'notifications') {
-                        if (e && e.button === 0) def.action(e);
-                    } else if (btnId === 'saved') {
-                        def.action(e);
-                    } else {
-                        def.action(e);
-                    }
-                }, false, settings.general.mobileScale);
+            });
 
-                btn.addEventListener('contextmenu', function(e) {
+            var hasProfile = (pos === profilePosition);
+
+            if (!hasButtons && !hasProfile) return;
+
+            // Создаём свёрнутый контейнер
+            var collapsed = document.createElement('div');
+            collapsed.className = 'lor-mobile-collapsed lor-mobile-' + pos;
+            collapsed.style.cssText = 'position:fixed !important;z-index:9999 !important;display:flex !important;gap:' + gap + 'px !important;';
+
+            if (settings.general.showBorder) {
+                collapsed.style.border = '1px solid ' + colors.borderColor;
+                collapsed.style.borderRadius = '12px';
+                collapsed.style.padding = padding + 'px';
+            }
+
+            if (pos === 'right' || pos === 'left') {
+                collapsed.style.flexDirection = 'column';
+            } else {
+                collapsed.style.flexDirection = 'row';
+            }
+
+            // Кнопка "Вверх" в свёрнутом контейнере
+            var upBtn = createButton('▲', 'Наверх (долгое нажатие - настройки)', null, false, settings.general.mobileScale);
+            upBtn.style.position = 'relative';
+            upBtn.addEventListener('click', function(e) {
+                if (upBtn._contextMenuJustFired) {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (def.showSettings) {
-                        showExtraButtons(btn);
-                    } else if (def.longPressAction === 'forum') {
-                        showForumModal();
-                    } else if (def.longPressAction === 'tracker') {
-                        showTrackerModal();
-                    } else if (def.longPressAction === 'notifications') {
-                        showNotificationsModal();
-                    } else if (def.longPressAction === 'saved') {
-                        addCurrentPageToSaved();
-                    } else if (def.longPressAction === 'blacklist') {
-                        confirmAndAddToBlacklist();
-                    }
-                });
-
-                mobileExpandedContainer.appendChild(btn);
-                allButtons[btnId] = btn;
-                if (btnId === 'notifications') {
-                    updateNotificationBadge(btn);
+                    return;
                 }
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+            upBtn.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                showExtraButtons(upBtn, pos);
+            });
+            collapsed.appendChild(upBtn);
+
+            // Кнопка уведомлений в свёрнутом контейнере
+            var notifBtn = createButton('🔔', 'Уведомления (долгое нажатие - список)', null, false, settings.general.mobileScale);
+            notifBtn.addEventListener('click', function(e) {
+                if (notifBtn._contextMenuJustFired) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
+                if (e && e.button === 0) location.href = 'https://www.linux.org.ru/notifications';
+            });
+            notifBtn.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                showNotificationsModal();
+            });
+            collapsed.appendChild(notifBtn);
+            if (settings.buttons['notifications'] && settings.buttons['notifications'][pos]) {
+                updateNotificationBadge(notifBtn);
+                allButtons['notifications_' + pos] = notifBtn;
             }
+
+            // Кнопка "Вниз" в свёрнутом контейнере
+            var downBtn = createButton('▼', 'Вниз (долгое нажатие - настройки)', null, false, settings.general.mobileScale);
+            downBtn.style.position = 'relative';
+            downBtn.addEventListener('click', function(e) {
+                if (downBtn._contextMenuJustFired) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
+                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            });
+            downBtn.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                showExtraButtons(downBtn, pos);
+            });
+            collapsed.appendChild(downBtn);
+
+            // Создаём развёрнутый контейнер
+            var expanded = document.createElement('div');
+            expanded.className = 'lor-mobile-expanded lor-mobile-' + pos;
+            expanded.style.cssText = 'position:fixed !important;z-index:9999 !important;display:none !important;gap:' + gap + 'px !important;';
+
+            if (pos === 'right' || pos === 'left') {
+                expanded.style.flexDirection = 'column';
+                expanded.style.maxHeight = '70vh';
+                expanded.style.overflowY = 'auto';
+            } else {
+                expanded.style.flexDirection = 'row';
+                expanded.style.maxWidth = '90vw';
+                expanded.style.overflowX = 'auto';
+            }
+
+            if (settings.general.showBorder) {
+                expanded.style.border = '1px solid ' + colors.borderColor;
+                expanded.style.borderRadius = '12px';
+                expanded.style.padding = padding + 'px';
+            }
+
+            // Добавляем профиль только на выбранную панель
+            if (hasProfile) {
+                var profileBtn = createButton('👤', 'Профиль (долгое нажатие - настройки)', null, true, settings.general.mobileScale);
+                profileBtn.style.position = 'relative';
+                profileBtn.addEventListener('click', function(e) {
+                    if (profileBtn._contextMenuJustFired) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    }
+                    location.href = getProfileUrl();
+                });
+                profileBtn.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showExtraButtons(profileBtn, pos);
+                });
+                expanded.appendChild(profileBtn);
+                allButtons['profile_' + pos] = profileBtn;
+            }
+
+            // Добавляем обычные кнопки
+            orderedButtons.forEach(function(btnId) {
+                if (btnId === 'profile') return;
+
+                var btnConfig = settings.buttons[btnId];
+                if (!btnConfig || !btnConfig[pos]) return;
+
+                var isCustom = btnId.startsWith('custom_');
+                if (isCustom) {
+                    var customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; });
+                    if (customBtn) {
+                        var btn = createButton(customBtn.icon, customBtn.title, function() {
+                            location.href = customBtn.url;
+                        }, false, settings.general.mobileScale);
+                        expanded.appendChild(btn);
+                        allButtons[btnId + '_' + pos] = btn;
+                    }
+                } else if (buttonDefs[btnId]) {
+                    var def = buttonDefs[btnId];
+
+                    // Создаём кнопку с пустым callback
+                    var btn = createButton(def.text, def.title, null, false, settings.general.mobileScale);
+
+                    // Основной обработчик клика
+                    btn.addEventListener('click', function(e) {
+                        if (btn._contextMenuJustFired) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return;
+                        }
+                        def.action(e);
+                    });
+
+                    // Обработчик contextmenu
+                    btn.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        if (def.showSettings) {
+                            showExtraButtons(btn, pos);
+                        } else if (btnId === 'forum') {
+                            showForumModal();
+                        } else if (btnId === 'tracker') {
+                            showTrackerModal();
+                        } else if (btnId === 'notifications') {
+                            showNotificationsModal();
+                        } else if (btnId === 'saved') {
+                            addCurrentPageToSaved();
+                        } else if (btnId === 'blacklist') {
+                            confirmAndAddToBlacklist();
+                        }
+                    });
+
+                    if (def.showSettings) {
+                        btn.style.position = 'relative';
+                    }
+
+                    expanded.appendChild(btn);
+                    allButtons[btnId + '_' + pos] = btn;
+                    if (btnId === 'notifications') {
+                        updateNotificationBadge(btn);
+                    }
+                }
+            });
+
+            document.body.appendChild(collapsed);
+            document.body.appendChild(expanded);
+
+            mobileCollapsedContainers[pos] = collapsed;
+            mobileExpandedContainers[pos] = expanded;
         });
 
         positionMobilePanels();
 
-        document.body.appendChild(mobileCollapsedContainer);
-        document.body.appendChild(mobileExpandedContainer);
-
-        if (settings.buttons['notifications'] && allButtons['notifications']) {
+        if (settings.buttons['notifications']) {
             setInterval(function() {
-                if (allButtons['notifications']) {
-                    updateNotificationBadge(allButtons['notifications']);
-                }
+                ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+                    var key = 'notifications_' + pos;
+                    if (allButtons[key]) {
+                        updateNotificationBadge(allButtons[key]);
+                    }
+                });
             }, 5000);
         }
     }
@@ -2219,44 +2863,72 @@
     function positionMobilePanels() {
         var scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
 
-        if (!mobileCollapsedContainer || !mobileExpandedContainer) return;
+        var positions = {
+            right: {
+                top: '50%',
+                transform: 'translateY(-50%)',
+                left: 'auto',
+                right: scrollbarWidth + Math.round(window.innerWidth * 0.02) + 'px',
+                bottom: 'auto'
+            },
+            left: {
+                top: '50%',
+                transform: 'translateY(-50%)',
+                left: Math.round(window.innerWidth * 0.02) + 'px',
+                right: 'auto',
+                bottom: 'auto'
+            },
+            top: {
+                top: Math.round(window.innerHeight * 0.02) + 'px',
+                transform: 'translateX(-50%)',
+                left: '50%',
+                right: 'auto',
+                bottom: 'auto'
+            },
+            bottom: {
+                top: 'auto',
+                transform: 'translateX(-50%)',
+                left: '50%',
+                right: 'auto',
+                bottom: Math.round(window.innerHeight * 0.02) + 'px'
+            }
+        };
 
-        // Всегда вертикально: справа, верхняя треть
-        var rightOffset = scrollbarWidth + Math.round(window.innerWidth * 0.02);
-        var topPos = Math.round(window.innerHeight * 0.15);
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            var collapsed = mobileCollapsedContainers[pos];
+            var expanded = mobileExpandedContainers[pos];
+            var posStyle = positions[pos];
 
-        mobileCollapsedContainer.style.top = topPos + 'px';
-        mobileCollapsedContainer.style.right = rightOffset + 'px';
-        mobileCollapsedContainer.style.left = 'auto';
-        mobileCollapsedContainer.style.transform = 'none';
-        mobileCollapsedContainer.style.flexDirection = 'column';
-
-        mobileExpandedContainer.style.top = topPos + 'px';
-        mobileExpandedContainer.style.right = rightOffset + 'px';
-        mobileExpandedContainer.style.left = 'auto';
-        mobileExpandedContainer.style.transform = 'none';
-        mobileExpandedContainer.style.flexDirection = 'column';
+            if (collapsed) {
+                for (var prop in posStyle) {
+                    collapsed.style[prop] = posStyle[prop];
+                }
+            }
+            if (expanded) {
+                for (var prop in posStyle) {
+                    expanded.style[prop] = posStyle[prop];
+                }
+            }
+        });
     }
 
     function destroyMobilePanel() {
-        if (mobileCollapsedContainer) {
-            mobileCollapsedContainer.remove();
-            mobileCollapsedContainer = null;
-        }
-        if (mobileExpandedContainer) {
-            mobileExpandedContainer.remove();
-            mobileExpandedContainer = null;
-        }
-        isMobilePanelExpanded = false;
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            if (mobileCollapsedContainers[pos]) { mobileCollapsedContainers[pos].remove(); mobileCollapsedContainers[pos] = null; }
+            if (mobileExpandedContainers[pos]) { mobileExpandedContainers[pos].remove(); mobileExpandedContainers[pos] = null; }
+            isMobilePanelExpanded[pos] = false;
+        });
     }
 
     // === ДЕСКОПНАЯ ПАНЕЛЬ ===
 
     function destroyDesktopPanel() {
-        if (panelContainer) {
-            panelContainer.remove();
-            panelContainer = null;
-        }
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            if (panelContainers[pos]) {
+                panelContainers[pos].remove();
+                panelContainers[pos] = null;
+            }
+        });
         settingsBtn = null;
         addCustomBtn = null;
         allButtons = {};
@@ -2264,25 +2936,146 @@
 
     function getOrderedButtons(settings) {
         var order = settings.buttonOrder || [];
-        var allBtns = Object.keys(settings.buttons).filter(function(k) { return settings.buttons[k]; });
         var customIds = settings.customButtons.map(function(cb) { return cb.id; });
         var result = [];
 
         order.forEach(function(id) {
-            if ((settings.buttons[id] || customIds.indexOf(id) !== -1) && result.indexOf(id) === -1) {
-                result.push(id);
+            if (result.indexOf(id) === -1) {
+                // Проверяем, активна ли кнопка хоть где-то
+                var btnConfig = settings.buttons[id];
+                if (btnConfig) {
+                    if (typeof btnConfig === 'object') {
+                        if (btnConfig.right || btnConfig.left || btnConfig.top || btnConfig.bottom) {
+                            result.push(id);
+                        }
+                    } else if (btnConfig) {
+                        result.push(id);
+                    }
+                } else if (customIds.indexOf(id) !== -1) {
+                    result.push(id);
+                }
             }
         });
 
-        allBtns.forEach(function(id) {
-            if (result.indexOf(id) === -1) result.push(id);
-        });
+        // Добавляем те, которых нет в order
+        for (var key in settings.buttons) {
+            if (result.indexOf(key) === -1) {
+                var btnConfig = settings.buttons[key];
+                if (btnConfig && typeof btnConfig === 'object' && (btnConfig.right || btnConfig.left || btnConfig.top || btnConfig.bottom)) {
+                    result.push(key);
+                }
+            }
+        }
 
         customIds.forEach(function(id) {
             if (result.indexOf(id) === -1) result.push(id);
         });
 
         return result;
+    }
+
+    function showExtraButtons(btn, panelPosition) {
+        var colors = getThemeColors();
+        var settings = getSettings();
+        var scale = settings.general.scale / 100;
+        var size = Math.round(44 * scale);
+        var fontSize = Math.round(22 * scale);
+
+        // Удаляем старые кнопки если есть
+        if (settingsBtn) {
+            settingsBtn.remove();
+            settingsBtn = null;
+        }
+        if (addCustomBtn) {
+            addCustomBtn.remove();
+            addCustomBtn = null;
+        }
+
+        btn.style.position = 'relative';
+
+        // Определяем позицию панели если не передана
+        if (!panelPosition) {
+            panelPosition = 'right';
+            ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+                if (panelContainers[pos] && panelContainers[pos].contains(btn)) {
+                    panelPosition = pos;
+                }
+                if (mobileExpandedContainers[pos] && mobileExpandedContainers[pos].contains(btn)) {
+                    panelPosition = pos;
+                }
+                if (mobileCollapsedContainers[pos] && mobileCollapsedContainers[pos].contains(btn)) {
+                    panelPosition = pos;
+                }
+            });
+        }
+
+        // Кнопка настроек (шестерёнка)
+        settingsBtn = document.createElement('div');
+        settingsBtn.textContent = '⚙';
+        settingsBtn.title = 'Настройки';
+        settingsBtn.style.cssText = 'position:absolute;width:' + size + 'px;height:' + size + 'px;background:' + colors.btnBg + ';color:' + colors.btnColor + ';border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:' + fontSize + 'px;z-index:10001;';
+
+        // Кнопка добавления (+)
+        addCustomBtn = document.createElement('div');
+        addCustomBtn.textContent = '+';
+        addCustomBtn.title = 'Добавить кнопку';
+        addCustomBtn.style.cssText = 'position:absolute;width:' + size + 'px;height:' + size + 'px;background:' + colors.btnBg + ';color:' + colors.btnColor + ';border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:' + fontSize + 'px;z-index:10001;';
+
+        // Позиционирование в зависимости от панели
+        // Кнопки располагаются последовательно с отступом 10px друг от друга
+
+        if (panelPosition === 'left') {
+            // Для левой панели - кнопки справа от основной, вертикально вниз
+            settingsBtn.style.left = 'auto';
+            settingsBtn.style.right = -(size + 10) + 'px';
+            settingsBtn.style.top = '0px';
+
+            addCustomBtn.style.left = 'auto';
+            addCustomBtn.style.right = -(size + 10) + 'px';
+            addCustomBtn.style.top = (size + 10) + 'px';
+
+        } else if (panelPosition === 'top') {
+            // Для верхней панели - кнопки снизу, горизонтально вправо
+            settingsBtn.style.left = '0px';
+            settingsBtn.style.top = 'auto';
+            settingsBtn.style.bottom = -(size + 10) + 'px';
+
+            addCustomBtn.style.left = (size + 10) + 'px';
+            addCustomBtn.style.top = 'auto';
+            addCustomBtn.style.bottom = -(size + 10) + 'px';
+
+        } else if (panelPosition === 'bottom') {
+            // Для нижней панели - кнопки сверху, горизонтально вправо
+            settingsBtn.style.left = '0px';
+            settingsBtn.style.top = -(size + 10) + 'px';
+
+            addCustomBtn.style.left = (size + 10) + 'px';
+            addCustomBtn.style.top = -(size + 10) + 'px';
+
+        } else {
+            // Для правой панели (по умолчанию) - кнопки слева от основной, вертикально вниз
+            settingsBtn.style.left = -(size + 10) + 'px';
+            settingsBtn.style.top = '0px';
+
+            addCustomBtn.style.left = -(size + 10) + 'px';
+            addCustomBtn.style.top = (size + 10) + 'px';
+        }
+
+        settingsBtn.onclick = function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            showSettingsModal();
+            hideExtraButtons();
+        };
+        btn.appendChild(settingsBtn);
+
+        addCustomBtn.onclick = function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            showAddCustomButtonModal();
+            hideExtraButtons();
+        };
+        btn.appendChild(addCustomBtn);
     }
 
     function addDesktopPanel() {
@@ -2294,138 +3087,218 @@
         var gap = Math.round(8 * scale);
         var padding = Math.round(8 * scale);
 
-        panelContainer = document.createElement('div');
-        panelContainer.className = 'lor-panel-container';
-        panelContainer.style.cssText = 'position:fixed !important;top:50% !important;transform:translateY(-50%) !important;z-index:9999 !important;display:flex !important;flex-direction:column !important;gap:' + gap + 'px !important;right:' + (scrollbarWidth + 20) + 'px !important;' +
-            (settings.general.showBorder ? 'border:1px solid ' + colors.borderColor + ';border-radius:12px;padding:' + padding + 'px;' : '');
+        // Очищаем старые панели
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            if (panelContainers[pos]) { panelContainers[pos].remove(); panelContainers[pos] = null; }
+        });
 
         settingsBtn = null;
         addCustomBtn = null;
         allButtons = {};
 
-        var profileBtn = createButton('👤', 'Профиль (ПКМ - настройки и добавление)', function(e) {
-            location.href = getProfileUrl();
-        }, true, settings.general.scale);
-        profileBtn.style.position = 'relative';
-        profileBtn.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            showExtraButtons(profileBtn);
-        });
-        panelContainer.appendChild(profileBtn);
-        allButtons['profile'] = profileBtn;
-
         var buttonDefs = {
             'up': { text: '▲', title: 'Наверх (ПКМ - настройки)', action: function() { window.scrollTo({ top: 0, behavior: 'smooth' }); }, showSettings: true },
-            'forum': { text: '📋', title: 'Форум (ПКМ - разделы)', action: function(e) {
-                if (e && e.button === 0) location.href = 'https://www.linux.org.ru/forum/';
-            }},
-            'tracker': { text: '☰', title: 'Трекер (ПКМ - темы)', action: function(e) {
-                if (e && e.button === 0) location.href = 'https://www.linux.org.ru/tracker/';
-            }},
-            'notifications': { text: '🔔', title: 'Уведомления (ПКМ - список)', action: function(e) {
-                if (e && e.button === 0) location.href = 'https://www.linux.org.ru/notifications';
-            }},
-            'saved': { text: '💾', title: 'Сохраненные (ПКМ - сохранить страницу)', action: function(e) {
-                if (e && e.button === 0) showSavedPagesModal();
-            }},
+            'forum': { text: '📋', title: 'Форум (ПКМ - разделы)', action: function(e) { if (e && e.button === 0) location.href = 'https://www.linux.org.ru/forum/'; }, longPressAction: 'forum' },
+            'tracker': { text: '☰', title: 'Трекер (ПКМ - темы)', action: function(e) { if (e && e.button === 0) location.href = 'https://www.linux.org.ru/tracker/'; }, longPressAction: 'tracker' },
+            'notifications': { text: '🔔', title: 'Уведомления (ПКМ - список)', action: function(e) { if (e && e.button === 0) location.href = 'https://www.linux.org.ru/notifications'; }, longPressAction: 'notifications' },
+            'saved': { text: '💾', title: 'Сохраненные (ПКМ - сохранить страницу)', action: function(e) { if (e && e.button === 0) showSavedPagesModal(); }, longPressAction: 'saved' },
             'myComment': { text: '💬', title: 'К моему последнему сообщению', action: goToMyLastComment },
             'mention': { text: '📢', title: 'К последнему упоминанию меня', action: goToLastMention },
-            'blacklist': { text: '🚫', title: 'Чёрный список (ПКМ - добавить автора)', action: showBlacklistModal },
-            'down': { text: '▼', title: 'Вниз (ПКМ - настройки)', action: function() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, showSettings: true }
+            'blacklist': { text: '🚫', title: 'Чёрный список (ПКМ - добавить автора)', action: showBlacklistModal, longPressAction: 'blacklist' },
+            'down': { text: '▼', title: 'Вниз (ПКМ - настройки)', action: function() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, showSettings: true },
+            'help': { text: '❓', title: 'Справка', action: function() { showHelpModal(); } }
         };
 
         var orderedButtons = getOrderedButtons(settings);
 
-        orderedButtons.forEach(function(btnId) {
-            if (btnId === 'profile') return;
+        var positions = {
+            right: {
+                top: '50%',
+                transform: 'translateY(-50%)',
+                left: 'auto',
+                right: (scrollbarWidth + 20) + 'px',
+                bottom: 'auto',
+                flexDirection: 'column'
+            },
+            left: {
+                top: '50%',
+                transform: 'translateY(-50%)',
+                left: '20px',
+                right: 'auto',
+                bottom: 'auto',
+                flexDirection: 'column'
+            },
+            top: {
+                top: '20px',
+                transform: 'translateX(-50%)',
+                left: '50%',
+                right: 'auto',
+                bottom: 'auto',
+                flexDirection: 'row'
+            },
+            bottom: {
+                top: 'auto',
+                transform: 'translateX(-50%)',
+                left: '50%',
+                right: 'auto',
+                bottom: '20px',
+                flexDirection: 'row'
+            }
+        };
 
-            var isCustom = btnId.startsWith('custom_');
-            if (isCustom) {
-                var customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; });
-                if (customBtn && settings.buttons[btnId]) {
-                    var btn = createButton(customBtn.icon, customBtn.title, function() {
-                        location.href = customBtn.url;
-                    }, false, settings.general.scale);
-                    panelContainer.appendChild(btn);
-                    allButtons[btnId] = btn;
-                }
-            } else if (buttonDefs[btnId] && settings.buttons[btnId]) {
-                var def = buttonDefs[btnId];
-                var btn = createButton(def.text, def.title, function(e) {
-                    if (btnId === 'forum' || btnId === 'tracker' || btnId === 'notifications') {
-                        if (e && e.button === 0) def.action(e);
-                    } else if (btnId === 'saved') {
-                        def.action(e);
-                    } else {
-                        def.action(e);
-                    }
-                }, false, settings.general.scale);
+        // Определяем, на какой панели должен быть профиль
+        var profileConfig = settings.buttons['profile'];
+        if (!profileConfig || typeof profileConfig !== 'object') {
+            profileConfig = { right: true, left: false, top: false, bottom: false };
+            settings.buttons['profile'] = profileConfig;
+        }
 
-                if (def.showSettings) {
-                    btn.style.position = 'relative';
-                    btn.addEventListener('contextmenu', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        showExtraButtons(btn);
-                    });
-                }
-
-                if (btnId === 'forum') {
-                    btn.addEventListener('contextmenu', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        showForumModal();
-                    });
-                }
-
-                if (btnId === 'tracker') {
-                    btn.addEventListener('contextmenu', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        showTrackerModal();
-                    });
-                }
-
-                if (btnId === 'notifications') {
-                    btn.addEventListener('contextmenu', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        showNotificationsModal();
-                    });
-                }
-
-                if (btnId === 'saved') {
-                    btn.addEventListener('contextmenu', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        addCurrentPageToSaved();
-                    });
-                }
-
-                if (btnId === 'blacklist') {
-                    btn.addEventListener('contextmenu', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        confirmAndAddToBlacklist();
-                    });
-                }
-
-                panelContainer.appendChild(btn);
-                allButtons[btnId] = btn;
-                if (btnId === 'notifications') {
-                    updateNotificationBadge(btn);
-                }
+        var profilePosition = 'right';
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            if (profileConfig[pos]) {
+                profilePosition = pos;
             }
         });
 
-        document.body.appendChild(panelContainer);
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            var hasButtons = false;
 
-        if (settings.buttons['notifications'] && allButtons['notifications']) {
-            setInterval(function() {
-                if (allButtons['notifications']) {
-                    updateNotificationBadge(allButtons['notifications']);
+            // Проверяем, есть ли обычные кнопки на этой панели
+            orderedButtons.forEach(function(btnId) {
+                if (btnId === 'profile') return;
+                var btnConfig = settings.buttons[btnId];
+                if (btnConfig && typeof btnConfig === 'object' && btnConfig[pos]) {
+                    hasButtons = true;
                 }
+            });
+
+            // Проверяем, должен ли профиль быть на этой панели
+            var hasProfile = (pos === profilePosition);
+
+            // Если нет ни кнопок, ни профиля - пропускаем эту панель
+            if (!hasButtons && !hasProfile) return;
+
+            var posStyle = positions[pos];
+            var container = document.createElement('div');
+            container.className = 'lor-panel-container lor-panel-' + pos;
+            container.style.cssText = 'position:fixed !important;z-index:9999 !important;display:flex !important;gap:' + gap + 'px !important;' +
+                'top:' + posStyle.top + ';' +
+                'transform:' + posStyle.transform + ';' +
+                'left:' + posStyle.left + ';' +
+                'right:' + posStyle.right + ';' +
+                'bottom:' + posStyle.bottom + ';' +
+                'flex-direction:' + posStyle.flexDirection + ';';
+
+            if (settings.general.showBorder) {
+                container.style.border = '1px solid ' + colors.borderColor;
+                container.style.borderRadius = '12px';
+                container.style.padding = padding + 'px';
+            }
+
+            // Добавляем профиль только на выбранную панель
+            if (hasProfile) {
+                var profileBtn = createButton('👤', 'Профиль (ПКМ - настройки и добавление)', null, true, settings.general.scale);
+                profileBtn.style.position = 'relative';
+
+                // Основной обработчик клика профиля
+                profileBtn.addEventListener('click', function(e) {
+                    if (profileBtn._contextMenuJustFired) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    }
+                    location.href = getProfileUrl();
+                });
+
+                // Обработчик contextmenu профиля
+                profileBtn.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showExtraButtons(profileBtn, pos);
+                });
+
+                container.appendChild(profileBtn);
+                allButtons['profile_' + pos] = profileBtn;
+            }
+
+            // Добавляем обычные кнопки
+            orderedButtons.forEach(function(btnId) {
+                if (btnId === 'profile') return;
+
+                var btnConfig = settings.buttons[btnId];
+                if (!btnConfig || !btnConfig[pos]) return;
+
+                var isCustom = btnId.startsWith('custom_');
+                if (isCustom) {
+                    var customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; });
+                    if (customBtn) {
+                        var btn = createButton(customBtn.icon, customBtn.title, function() {
+                            location.href = customBtn.url;
+                        }, false, settings.general.scale);
+                        container.appendChild(btn);
+                        allButtons[btnId + '_' + pos] = btn;
+                    }
+                } else if (buttonDefs[btnId]) {
+                    var def = buttonDefs[btnId];
+
+                    // Создаём кнопку с пустым callback
+                    var btn = createButton(def.text, def.title, null, false, settings.general.scale);
+
+                    // Основной обработчик клика с проверкой на contextmenu
+                    btn.addEventListener('click', function(e) {
+                        if (btn._contextMenuJustFired) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return;
+                        }
+                        def.action(e);
+                    });
+
+                    // Обработчик contextmenu
+                    btn.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        if (def.showSettings) {
+                            showExtraButtons(btn, pos);
+                        } else if (btnId === 'forum') {
+                            showForumModal();
+                        } else if (btnId === 'tracker') {
+                            showTrackerModal();
+                        } else if (btnId === 'notifications') {
+                            showNotificationsModal();
+                        } else if (btnId === 'saved') {
+                            addCurrentPageToSaved();
+                        } else if (btnId === 'blacklist') {
+                            confirmAndAddToBlacklist();
+                        }
+                    });
+
+                    if (def.showSettings) {
+                        btn.style.position = 'relative';
+                    }
+
+                    container.appendChild(btn);
+                    allButtons[btnId + '_' + pos] = btn;
+                    if (btnId === 'notifications') {
+                        updateNotificationBadge(btn);
+                    }
+                }
+            });
+
+            document.body.appendChild(container);
+            panelContainers[pos] = container;
+        });
+
+        // Запускаем обновление уведомлений
+        if (settings.buttons['notifications']) {
+            setInterval(function() {
+                ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+                    var key = 'notifications_' + pos;
+                    if (allButtons[key]) {
+                        updateNotificationBadge(allButtons[key]);
+                    }
+                });
             }, 5000);
         }
 
@@ -2615,14 +3488,8 @@
 
         trackerTableUpdated = true;
 
-        if (hasChanges && allButtons['tracker']) {
-            allButtons['tracker'].style.background = '#4CAF50';
-            setTimeout(function() {
-                if (allButtons['tracker']) {
-                    var colors = getThemeColors();
-                    allButtons['tracker'].style.background = colors.btnBg;
-                }
-            }, 3000);
+        if (hasChanges) {
+            highlightButton('tracker');
         }
     }
 
@@ -2685,19 +3552,20 @@
         }
         if (++attempts > 20) clearInterval(interval);
     }, 250);
+
     document.addEventListener('touchstart', function(e) {
         if (e.touches.length === 1) {
             touchStartY = e.touches[0].clientY;
             touchStartX = e.touches[0].clientX;
             touchMoved = false;
 
-            // Проверяем, начался ли тач на панели
             var target = e.target;
             var isInPanel = false;
-            if (mobileCollapsedContainer && mobileCollapsedContainer.contains(target)) isInPanel = true;
-            if (mobileExpandedContainer && mobileExpandedContainer.contains(target)) isInPanel = true;
+            ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+                if (mobileCollapsedContainers[pos] && mobileCollapsedContainers[pos].contains(target)) isInPanel = true;
+                if (mobileExpandedContainers[pos] && mobileExpandedContainers[pos].contains(target)) isInPanel = true;
+            });
 
-            // Сохраняем флаг в touchstart
             e.target._touchInPanel = isInPanel;
         }
     }, { passive: true });
@@ -2711,7 +3579,6 @@
                 touchMoved = true;
             }
 
-            // Если тач начался на панели и это вертикальный свайп - блокируем скролл
             if (e.target._touchInPanel && Math.abs(deltaY) > Math.abs(deltaX)) {
                 e.preventDefault();
             }
@@ -2729,20 +3596,20 @@
 
         var deltaY = (e.changedTouches[0] ? e.changedTouches[0].clientY : touchStartY) - touchStartY;
         var target = e.target;
-        var isInPanel = false;
-        if (mobileCollapsedContainer && mobileCollapsedContainer.contains(target)) isInPanel = true;
-        if (mobileExpandedContainer && mobileExpandedContainer.contains(target)) isInPanel = true;
 
-        if (!isInPanel) {
-            touchMoved = false;
-            return;
-        }
+        ['right', 'left', 'top', 'bottom'].forEach(function(pos) {
+            var isInPanel = false;
+            if (mobileCollapsedContainers[pos] && mobileCollapsedContainers[pos].contains(target)) isInPanel = true;
+            if (mobileExpandedContainers[pos] && mobileExpandedContainers[pos].contains(target)) isInPanel = true;
 
-        if (deltaY > SWIPE_THRESHOLD) {
-            expandMobilePanel();
-        } else if (deltaY < -SWIPE_THRESHOLD) {
-            collapseMobilePanel();
-        }
+            if (isInPanel) {
+                if (deltaY > SWIPE_THRESHOLD) {
+                    expandMobilePanel(pos);
+                } else if (deltaY < -SWIPE_THRESHOLD) {
+                    collapseMobilePanel(pos);
+                }
+            }
+        });
 
         touchMoved = false;
     });
