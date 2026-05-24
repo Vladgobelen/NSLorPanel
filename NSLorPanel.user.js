@@ -458,6 +458,24 @@
         closeBtn.onclick = modal.close;
     }
 
+    function parseLastVisitTime(str) {
+        if (!str || str === 'загрузка...' || str === 'ошибка' || str === 'неизвестно') return 0;
+        try {
+            const parts = str.split(' ');
+            if (parts.length >= 2) {
+                const datePart = parts[0];
+                const timePart = parts[1];
+                const dp = datePart.split('.');
+                const tp = timePart.split(':');
+                if (dp.length === 3 && tp.length === 3) {
+                    return new Date(2000 + parseInt(dp[2]), parseInt(dp[1]) - 1, parseInt(dp[0]),
+                                    parseInt(tp[0]), parseInt(tp[1]), parseInt(tp[2])).getTime();
+                }
+            }
+        } catch(e) {}
+        return 0;
+    }
+
     function showVisitsModal() {
         if (document.getElementById('lor-visits-overlay')) return;
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -488,7 +506,8 @@
                 nicks.sort(function(a, b) { return nickSortDir * a.localeCompare(b, 'ru'); });
             } else {
                 nicks.sort(function(a, b) {
-                    const timeA = tracked[a].checked || 0, timeB = tracked[b].checked || 0;
+                    var timeA = parseLastVisitTime(tracked[a].lastVisit);
+                    var timeB = parseLastVisitTime(tracked[b].lastVisit);
                     if (timeA !== timeB) return timeSortDir * (timeB - timeA);
                     return a.localeCompare(b, 'ru');
                 });
