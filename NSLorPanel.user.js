@@ -38,7 +38,8 @@ const BUTTON_DEFS = {
     blacklist: { text: '🚫', title: 'Чёрный список', action: showBlacklistModal, longPressAction: 'blacklist' },
     visits: { text: '🕐', title: 'Посещения', action: showVisitsModal, longPressAction: 'visits' },
     down: { text: '▼', title: 'Вниз', action: () => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), showSettings: true },
-    help: { text: '❓', title: 'Справка', action: showHelpModal }
+    help: { text: '❓', title: 'Справка', action: showHelpModal },
+    toggleCode: { text: '</>', title: 'Развернуть/Свернуть весь код', action: toggleAllCodeBlocks }
 };
 
 // ============================================================================
@@ -113,10 +114,11 @@ function getDefaultSettings() {
             blacklist: { right: true, left: false, top: false, bottom: false },
             visits: { right: true, left: false, top: false, bottom: false },
             down: { right: true, left: false, top: false, bottom: false },
-            help: { right: false, left: true, top: false, bottom: false }
+            help: { right: false, left: true, top: false, bottom: false },
+            toggleCode: { right: false, left: false, top: false, bottom: false }
         },
         customButtons: [],
-        buttonOrder: ['up','forum','tracker','notifications','saved','myComment','mention','blacklist','visits','down','help']
+        buttonOrder: ['up','forum','tracker','toggleCode','notifications','saved','myComment','mention','blacklist','visits','down','help']
     };
 }
 
@@ -671,7 +673,8 @@ function showSettingsModal() {
         var btnNames = {
             up: '▲ Наверх', forum: '📋 Форум', tracker: '☰ Трекер', notifications: '🔔 Уведомления',
             saved: '💾 Сохраненные', myComment: '💬 Мои сообщения', mention: '📢 Упоминания',
-            blacklist: '🚫 Чёрный список', visits: '🕐 Посещения', down: '▼ Вниз', help: '❓ Справка'
+            blacklist: '🚫 Чёрный список', visits: '🕐 Посещения', down: '▼ Вниз', help: '❓ Справка',
+            toggleCode: '</> Код'
         };
         var allButtonIds = settings.buttonOrder.slice();
         for (var key in settings.buttons) {
@@ -1233,6 +1236,64 @@ function goToLastMention() {
     let last = null; document.querySelectorAll('article.msg').forEach(c => { const a = c.querySelector('a[href*="/people/"]'); const author = a ? a.textContent.trim() : ''; if (author !== nick && c.textContent.includes(nick)) last = c; });
     if (last) { last.scrollIntoView({ behavior: 'smooth', block: 'start' }); last.style.outline = '3px solid #ff6600'; setTimeout(() => { last.style.outline = ''; }, 3000); }
     else { alert('Упоминаний вас на этой странице нет.'); }
+}
+
+function toggleAllCodeBlocks() {
+    let anchor = null;
+    let anchorVisualTop = 0;
+    const articles = document.querySelectorAll('article.msg');
+    for (let i = 0; i < articles.length; i++) {
+        const rect = articles[i].getBoundingClientRect();
+        if (rect.bottom > 0 && rect.top < window.innerHeight * 0.6) {
+            anchor = articles[i];
+            anchorVisualTop = rect.top;
+            break;
+        }
+    }
+
+    const blocks = document.querySelectorAll('div.code');
+    if (!blocks.length) return;
+    let spoiledCount = 0;
+    blocks.forEach(b => { if (b.classList.contains('spoiled')) spoiledCount++; });
+    const shouldExpand = spoiledCount >= Math.ceil(blocks.length / 2);
+
+    blocks.forEach(block => {
+        if (shouldExpand) {
+            if (block.classList.contains('spoiled')) {
+                block.classList.remove('spoiled');
+                block.classList.add('unspoiled');
+                const wrap = block.querySelector('.spoiler-open');
+                if (wrap) wrap.style.display = 'none';
+                block.style.maxHeight = 'none';
+                block.style.overflow = 'visible';
+            }
+        } else {
+            if (!block.classList.contains('spoiled')) {
+                block.classList.remove('unspoiled');
+                block.classList.add('spoiled');
+                let wrap = block.querySelector('.spoiler-open');
+                if (!wrap) {
+                    wrap = document.createElement('div');
+                    wrap.className = 'spoiler-open';
+                    wrap.innerHTML = '<span class="btn btn-small btn-default spoiler-button">Развернуть</span>';
+                    block.appendChild(wrap);
+                }
+                wrap.style.display = '';
+                block.style.maxHeight = '';
+                block.style.overflow = '';
+            }
+        }
+    });
+
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            if (anchor && document.body.contains(anchor)) {
+                const newRect = anchor.getBoundingClientRect();
+                const delta = newRect.top - anchorVisualTop;
+                window.scrollTo(0, window.scrollY + delta);
+            }
+        });
+    });
 }
 
 function scrollToLastMod() {
