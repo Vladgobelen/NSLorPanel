@@ -5,6 +5,6 @@ git add .
 git commit -m "$1 $j"
 git push git@github.com:Vladgobelen/NSLorPanel.git
 git add .
-git commit -m "$1 $j"
+git commit -m "Вторая реализация редактора: визуальный редактор. Очень криво."
 git push
 

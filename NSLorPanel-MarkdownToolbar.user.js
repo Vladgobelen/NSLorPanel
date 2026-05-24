@@ -6,7 +6,7 @@
 // @grant        none
 // @inject-into  page
 // @run-at       document-end
-// @version      9.12
+// @version      9.16
 // ==/UserScript==
 (function() {
     'use strict';
@@ -80,68 +80,6 @@
 
     const px = (v) => `${Math.round(v * CFG.scale)}px`;
 
-    // === SPOILER STYLES & LOGIC (GLOBAL) ===
-    function injectSpoilerCSS() {
-        if (document.getElementById('lor-spoiler-styles')) return;
-        const style = document.createElement('style');
-        style.id = 'lor-spoiler-styles';
-        style.textContent = `
-            .lor-md-spoiler {
-                border: 1px solid ${CFG.theme.border};
-                border-radius: 6px;
-                margin: 0.6em 0;
-                overflow: hidden;
-                background: rgba(128,128,128,0.05);
-            }
-            .lor-spoiler-header {
-                background: ${CFG.theme.btnH};
-                color: ${CFG.theme.txt};
-                padding: 7px 12px;
-                cursor: pointer;
-                user-select: none;
-                font-weight: 600;
-                font-size: 0.9em;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }
-            .lor-spoiler-header:hover { background: ${CFG.accent}; color: #fff; }
-            .lor-spoiler-header::before { content: '▸'; display: inline-block; transition: transform 0.2s ease; }
-            .lor-md-spoiler.is-open .lor-spoiler-header::before { transform: rotate(90deg); }
-            .lor-spoiler-body { padding: 10px 12px; display: none; border-top: 1px solid ${CFG.theme.border}; }
-            .lor-md-spoiler.is-open .lor-spoiler-body { display: block; }
-            #lor-visual-area .lor-spoiler-header { font-family: system-ui, sans-serif; }
-        `;
-        document.head.appendChild(style);
-    }
-
-    function initSpoilerToggle() {
-        document.addEventListener('click', function(e) {
-            const header = e.target.closest('.lor-spoiler-header');
-            if (header && header.parentElement.classList.contains('lor-md-spoiler')) {
-                header.parentElement.classList.toggle('is-open');
-            }
-        });
-    }
-
-    function applySpoilersToContent() {
-        const containers = document.querySelectorAll('.message-text, .comment, .msg-body, .topic, .post-content, .content, .reply');
-        containers.forEach(el => {
-            if (el.dataset.mdSpoilerParsed) return;
-            el.dataset.mdSpoilerParsed = '1';
-            // Замена сырых маркеров >>> ... <<< на интерактивный спойлер
-            el.innerHTML = el.innerHTML.replace(/(>>>|&gt;&gt;&gt;)((?:.|\n)*?)(<<<|&lt;&lt;&lt;)/g, (_, open, content, close) => {
-                const cleanContent = content.replace(/^\n+|\n+$/g, '');
-                if (!cleanContent) return '';
-                return `<div class="lor-md-spoiler"><div class="lor-spoiler-header">Спойлер</div><div class="lor-spoiler-body">${cleanContent}</div></div>`;
-            });
-        });
-    }
-
-    injectSpoilerCSS();
-    initSpoilerToggle();
-    applySpoilersToContent();
-
     function md2html(md) {
         let html = md;
         html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -201,9 +139,6 @@
             else if (line.match(/^\* (.+)$/)) result.push('<li>' + line.replace(/^\* /, '') + '</li>');
             else if (line.match(/^\d+\. (.+)$/)) result.push('<li>' + line.replace(/^\d+\. /, '') + '</li>');
             else if (line.match(/^---$/)) result.push('<hr>');
-            // FIX: Спойлер теперь генерирует интерактивную структуру
-            else if (line.match(/^&gt;&gt;&gt;\s*$/)) result.push('<div class="lor-md-spoiler"><div class="lor-spoiler-header">Спойлер</div><div class="lor-spoiler-body">');
-            else if (line.match(/^&lt;&lt;&lt;\s*$/)) result.push('</div></div>');
             else if (line.trim()) result.push(line + '<br>');
             else result.push('<br>');
         }
@@ -271,10 +206,6 @@
                 return '```\n' + content + '\n```\n\n';
             }
             if (tag === 'hr') return '---\n';
-            // FIX: Поддержка старой и новой структуры спойлера
-            if (tag === 'div' && (node.className === 'spoiler' || node.classList.contains('lor-md-spoiler'))) {
-                return '>>>\n' + processChildren(node, depth).trim() + '\n<<<\n';
-            }
             if (tag === 'table') {
                 let rows = node.querySelectorAll('tr');
                 let md = '';
@@ -378,7 +309,6 @@
         {i:'####', t:'Заголовок 4', md:{type:'line-prefix', prefix:'#### '}, visual:{cmd:'formatBlock', arg:4}},
         {i:'#####', t:'Заголовок 5', md:{type:'line-prefix', prefix:'##### '}, visual:{cmd:'formatBlock', arg:5}},
         {i:'######', t:'Заголовок 6', md:{type:'line-prefix', prefix:'###### '}, visual:{cmd:'formatBlock', arg:6}},
-        {i:'◐', t:'Спойлер', md:{type:'block-wrap', open:'>>>\n', close:'\n<<<'}, visual:{cmd:'insertSpoiler'}},
         {sep:1},
         {i:'🔗', t:'Ссылка', md:{type:'smart-wrap', p:'[', s:'](url)', placeholder:'текст', cursorOn:'text'}, visual:{cmd:'createLink'}},
         {i:'@', t:'Упоминание', md:{type:'smart-wrap', p:'@', s:'', placeholder:'ник', cursorAfter:true}, visual:{cmd:'insertMention'}},
@@ -393,10 +323,15 @@
         {i:'␣', t:'Pre-formatted', md:{type:'line-prefix', prefix:'    ', multiline:true}, visual:{cmd:'formatBlock', arg:'pre'}}
     ];
 
+    // === HISTORY MANAGER (FIXED) ===
     const historyManager = (() => {
-        const stack = [], maxLen = 50;
-        let idx = -1, ta = null, debounce = null, skipNextInput = false;
+        const stack = [], visualStack = [], maxLen = 50;
+        let idx = -1, visualIdx = -1;
+        let ta = null, visualArea = null;
+        let debounce = null, visualDebounce = null;
+        let skipNextInput = false, skipNextVisualInput = false;
         const hotkeys = [];
+
         function pushState() {
             if (!ta) return;
             if (idx >= 0 && stack[idx] === ta.value) return;
@@ -406,33 +341,69 @@
             idx = stack.length - 1;
             updateUI();
         }
-        function restoreState(newIdx) {
-            idx = newIdx;
-            ta.value = stack[idx];
-            ta.focus();
-            ta.dispatchEvent(new Event('input', { bubbles: true }));
+
+        function pushVisualState() {
+            if (!visualArea) return;
+            const content = visualArea.innerHTML;
+            if (visualIdx >= 0 && visualStack[visualIdx] === content) return;
+            visualStack.splice(visualIdx + 1);
+            visualStack.push(content);
+            if (visualStack.length > maxLen) visualStack.shift();
+            visualIdx = visualStack.length - 1;
             updateUI();
         }
+
+        function restoreState(newIdx) {
+            idx = newIdx;
+            if (ta) {
+                ta.value = stack[idx];
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            if (visualArea && visualArea.offsetParent !== null) {
+                visualArea.innerHTML = md2html(ta.value);
+            }
+            updateUI();
+        }
+
+        function restoreVisualState(newIdx) {
+            visualIdx = newIdx;
+            if (visualArea) {
+                visualArea.innerHTML = visualStack[visualIdx];
+                syncTextarea(visualArea);
+            }
+            updateUI();
+        }
+
         function updateUI() {
             document.querySelectorAll('.lor-toolbar').forEach(toolbar => {
                 const u = toolbar.querySelector('button[title*="Отменить"]');
                 const r = toolbar.querySelector('button[title*="Повторить"]');
                 if (!u || !r) return;
-                u.style.opacity = idx > 0 ? '1' : '0.4';
-                u.style.pointerEvents = idx > 0 ? 'auto' : 'none';
-                r.style.opacity = idx < stack.length - 1 ? '1' : '0.4';
-                r.style.pointerEvents = idx < stack.length - 1 ? 'auto' : 'none';
+                const isVisualActive = visualArea && visualArea.offsetParent !== null;
+                const canUndo = isVisualActive ? visualIdx > 0 : idx > 0;
+                const canRedo = isVisualActive ? visualIdx < visualStack.length - 1 : idx < stack.length - 1;
+                u.style.opacity = canUndo ? '1' : '0.4';
+                u.style.pointerEvents = canUndo ? 'auto' : 'none';
+                r.style.opacity = canRedo ? '1' : '0.4';
+                r.style.pointerEvents = canRedo ? 'auto' : 'none';
             });
         }
+
         document.addEventListener('keydown', function(e) {
             const activeEl = document.activeElement;
-            if (activeEl !== ta && activeEl?.id !== 'lor-visual-area') return;
+            const isVisualActive = visualArea && visualArea.offsetParent !== null;
+            const target = isVisualActive ? visualArea : ta;
+            if (activeEl !== target) return;
             const key = e.key.toLowerCase();
             if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === 'z') {
-                e.preventDefault(); historyManager.undo(); return;
+                e.preventDefault();
+                if (isVisualActive) undoVisual(); else undo();
+                return;
             }
             if ((e.ctrlKey || e.metaKey) && !e.altKey && (key === 'y' || (e.shiftKey && key === 'z'))) {
-                e.preventDefault(); historyManager.redo(); return;
+                e.preventDefault();
+                if (isVisualActive) redoVisual(); else redo();
+                return;
             }
             if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
                 for (const { config, handler } of hotkeys) {
@@ -442,25 +413,44 @@
                 }
             }
         }, true);
+
         return {
-            init(textarea) {
+            init: function(textarea, va) {
                 ta = textarea;
-                stack.length = 0; idx = -1;
+                visualArea = va;
+                stack.length = 0; visualStack.length = 0;
+                idx = -1; visualIdx = -1;
                 pushState();
+                if (va) pushVisualState();
                 ta.addEventListener('input', () => {
                     if (skipNextInput) { skipNextInput = false; return; }
                     clearTimeout(debounce);
                     debounce = setTimeout(pushState, 200);
                 }, true);
-                this.registerHotkey = (def, handler) => {
-                    if (def.hotkey) hotkeys.push({ config: def.hotkey, handler });
-                };
+                if (va) {
+                    va.addEventListener('input', () => {
+                        if (skipNextVisualInput) { skipNextVisualInput = false; return; }
+                        clearTimeout(visualDebounce);
+                        visualDebounce = setTimeout(pushVisualState, 200);
+                    }, true);
+                }
                 updateUI();
             },
-            undo() { if (idx > 0) restoreState(idx - 1); },
-            redo() { if (idx < stack.length - 1) restoreState(idx + 1); },
-            pushAfterAction() { skipNextInput = true; pushState(); },
-            getTextarea() { return ta; }
+            registerHotkey: function(def, handler) {
+                if (def.hotkey) hotkeys.push({ config: def.hotkey, handler });
+            },
+            undo: function() { if (idx > 0) restoreState(idx - 1); },
+            redo: function() { if (idx < stack.length - 1) restoreState(idx + 1); },
+            undoVisual: function() { if (visualIdx > 0) restoreVisualState(visualIdx - 1); },
+            redoVisual: function() { if (visualIdx < visualStack.length - 1) restoreVisualState(visualIdx + 1); },
+            pushAfterAction: function() {
+                skipNextInput = true;
+                if (visualArea && visualArea.offsetParent !== null) skipNextVisualInput = true;
+                pushState();
+                if (visualArea) pushVisualState();
+            },
+            getTextarea: function() { return ta; },
+            getVisualArea: function() { return visualArea; }
         };
     })();
 
@@ -515,7 +505,6 @@
         if (!sel.rangeCount) return;
         let node = sel.anchorNode;
         if (node.nodeType === 3) node = node.parentNode;
-
         let block = node;
         while (block && block !== visualArea) {
             const tag = block.tagName;
@@ -527,7 +516,6 @@
             block = sel.anchorNode.parentNode;
             while (block && block !== visualArea && !['P', 'DIV'].includes(block.tagName)) block = block.parentNode;
         }
-
         const targetTag = `H${level}`;
         if (block.tagName === targetTag) {
             const p = document.createElement('p');
@@ -540,7 +528,6 @@
             block.replaceWith(h);
             block = h;
         }
-
         const range = document.createRange();
         range.selectNodeContents(block);
         range.collapse(false);
@@ -644,7 +631,6 @@
     function executeVisualAction(visualArea, def) {
         if (!def.visual || Object.keys(def.visual).length === 0) return;
         const v = def.visual;
-
         if (v.cmd === 'insertMention') {
             const sel = window.getSelection();
             let username = sel.toString().trim();
@@ -654,7 +640,6 @@
             }
             username = username.replace(/^@/, '').trim();
             if (!username) return;
-
             const link = document.createElement('a');
             link.href = `https://www.linux.org.ru/people/${encodeURIComponent(username)}/profile`;
             link.textContent = '@' + username;
@@ -662,7 +647,6 @@
             link.style.cssText = `color:${CFG.accent};text-decoration:none;font-weight:500;`;
             link.addEventListener('mouseenter', function() { this.style.textDecoration = 'underline'; });
             link.addEventListener('mouseleave', function() { this.style.textDecoration = 'none'; });
-
             if (sel.rangeCount) {
                 const range = sel.getRangeAt(0);
                 range.deleteContents();
@@ -677,15 +661,12 @@
             visualArea.focus();
             return;
         }
-
         if (v.cmd === 'insertTable' || v.cmd === 'insertTableAlign') {
             const isAlign = v.cmd === 'insertTableAlign';
             const table = document.createElement('table');
             table.style.cssText = 'border-collapse:collapse;margin:0.5em 0;width:100%;max-width:100%;';
-
             const thead = document.createElement('thead');
             const tbody = document.createElement('tbody');
-
             if (isAlign) {
                 const headerRow = document.createElement('tr');
                 const headers = [
@@ -700,7 +681,6 @@
                     headerRow.appendChild(th);
                 });
                 thead.appendChild(headerRow);
-
                 const bodyRow = document.createElement('tr');
                 for (let i = 0; i < 3; i++) {
                     const td = document.createElement('td');
@@ -718,7 +698,6 @@
                     headerRow.appendChild(th);
                 });
                 thead.appendChild(headerRow);
-
                 const bodyRow = document.createElement('tr');
                 for (let i = 0; i < 2; i++) {
                     const td = document.createElement('td');
@@ -728,13 +707,11 @@
                 }
                 tbody.appendChild(bodyRow);
             }
-
             table.appendChild(thead);
             table.appendChild(tbody);
             insertNodeAtCursor(visualArea, table);
             return;
         }
-
         if (v.cmd === 'break-tag') {
             const sel = window.getSelection();
             let node = sel.anchorNode;
@@ -765,7 +742,6 @@
             syncTextarea(visualArea);
             return;
         }
-
         if (v.cmd === 'boldItalic') {
             document.execCommand('bold', false, null);
             document.execCommand('italic', false, null);
@@ -804,17 +780,6 @@
             }
             syncTextarea(visualArea); visualArea.focus(); return;
         }
-        if (v.cmd === 'insertSpoiler') {
-            const text = window.getSelection().toString() || 'скрытый текст';
-            insertBlockAtCursor(visualArea, text, (t) => {
-                const div = document.createElement('div');
-                div.className = 'lor-md-spoiler';
-                div.innerHTML = `<div class="lor-spoiler-header">Спойлер</div><div class="lor-spoiler-body">${t}</div>`;
-                return div;
-            });
-            return;
-        }
-
         if (v.cmd === 'blockquote') {
             if (savedPageSelection) {
                 insertBlockAtCursor(visualArea, savedPageSelection, (t) => {
@@ -840,7 +805,6 @@
             visualArea.focus();
             return;
         }
-
         if (v.cmd === 'indent') {
             if (savedPageSelection) {
                 insertBlockAtCursor(visualArea, savedPageSelection, (t) => {
@@ -865,7 +829,6 @@
             visualArea.focus();
             return;
         }
-
         if (v.cmd === 'formatBlock' && v.arg !== undefined) {
             if (typeof v.arg === 'number' && v.arg >= 1 && v.arg <= 6) {
                 setHeader(visualArea, v.arg);
@@ -879,7 +842,6 @@
             visualArea.focus();
             return;
         }
-
         if (v.cmd === 'formatBlock' && v.arg) {
             document.execCommand(v.cmd, false, v.arg);
         } else if (v.cmd) {
@@ -920,11 +882,19 @@
             if (def.action === 'undo') {
                 btn.style.opacity = '0.4';
                 btn.style.pointerEvents = 'none';
-                btn.addEventListener('click', () => historyManager.undo());
+                btn.addEventListener('click', () => {
+                    const va = historyManager.getVisualArea();
+                    if (va && va.offsetParent !== null) historyManager.undoVisual();
+                    else historyManager.undo();
+                });
             } else if (def.action === 'redo') {
                 btn.style.opacity = '0.4';
                 btn.style.pointerEvents = 'none';
-                btn.addEventListener('click', () => historyManager.redo());
+                btn.addEventListener('click', () => {
+                    const va = historyManager.getVisualArea();
+                    if (va && va.offsetParent !== null) historyManager.redoVisual();
+                    else historyManager.redo();
+                });
             } else {
                 btn.addEventListener('mouseenter', () => {
                     btn.style.background = CFG.theme.btnH;
@@ -1005,16 +975,15 @@
 
         visualPanel.appendChild(visualArea);
         panelsContainer.appendChild(visualPanel);
+        historyManager.init(textarea, visualArea);
         buildToolbar(visualPanel, visualArea, (def) => executeVisualAction(visualArea, def));
 
         visualArea.addEventListener('keydown', function(e) {
             if (e.key !== 'Enter') return;
             const sel = window.getSelection();
             if (!sel.rangeCount) return;
-
             let node = sel.anchorNode;
             if (node.nodeType === 3) node = node.parentNode;
-
             let block = node;
             while (block && block !== visualArea) {
                 const tag = block.tagName;
@@ -1022,14 +991,12 @@
                 block = block.parentNode;
             }
             if (!block || block === visualArea) return;
-
             let atEnd = false;
             if (sel.anchorNode.nodeType === 3) {
                 atEnd = sel.anchorOffset >= sel.anchorNode.textContent.length;
             } else {
                 atEnd = true;
             }
-
             if (block.tagName.match(/^H[1-6]$/)) {
                 const p = document.createElement('p');
                 p.innerHTML = '<br>';
@@ -1041,8 +1008,7 @@
                 sel.removeAllRanges();
                 sel.addRange(range);
                 e.preventDefault();
-            }
-            else if (block.tagName === 'BLOCKQUOTE') {
+            } else if (block.tagName === 'BLOCKQUOTE') {
                 const text = block.textContent || '';
                 if (text.trim() === '' || atEnd) {
                     const br = document.createElement('br');
@@ -1054,8 +1020,7 @@
                 } else {
                     document.execCommand('insertLineBreak');
                 }
-            }
-            else if (block.tagName === 'LI') {
+            } else if (block.tagName === 'LI') {
                 const text = block.textContent || '';
                 if (text.trim() === '' || atEnd) {
                     const list = block.parentElement;
@@ -1075,11 +1040,9 @@
                 } else {
                     document.execCommand('insertLineBreak');
                 }
-            }
-            else {
+            } else {
                 document.execCommand('insertLineBreak');
             }
-
             visualArea.focus();
             syncTextarea(visualArea);
         });
@@ -1099,6 +1062,7 @@
             tab.classList.add('active');
             visualPanel.classList.add('active');
             visualArea.innerHTML = md2html(textarea.value);
+            historyManager.pushAfterAction();
             setTimeout(() => {
                 const range = document.createRange();
                 const sel = window.getSelection();
@@ -1113,14 +1077,12 @@
 
     function init() {
         if (!CFG.enabled) return;
-        applySpoilersToContent();
         document.querySelectorAll('textarea[name="text"], textarea.form-control, textarea[name="msg"]').forEach(ta => {
             if (ta.dataset.mdInit) return;
             ta.dataset.mdInit = '1';
             const parent = ta.parentElement;
             if (!parent) return;
             if (getComputedStyle(parent).flexDirection === 'row') parent.style.flexDirection = 'column';
-            historyManager.init(ta);
             buildToolbar(parent, ta, (def) => {
                 executeMarkdownAction(ta, def);
                 historyManager.pushAfterAction();
@@ -1137,14 +1099,12 @@
 
     const domObs = new MutationObserver(() => {
         if (CFG.enabled) {
-            applySpoilersToContent();
             document.querySelectorAll('textarea[name="text"], textarea.form-control, textarea[name="msg"]').forEach(ta => {
                 if (!ta.dataset.mdInit) {
                     ta.dataset.mdInit = '1';
                     const parent = ta.parentElement;
                     if (parent) {
                         if (getComputedStyle(parent).flexDirection === 'row') parent.style.flexDirection = 'column';
-                        historyManager.init(ta);
                         buildToolbar(parent, ta, (def) => {
                             executeMarkdownAction(ta, def);
                             historyManager.pushAfterAction();
