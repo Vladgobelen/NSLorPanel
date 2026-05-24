@@ -8,6 +8,7 @@
 // ==/UserScript==
 (function() {
     'use strict';
+
     const THEME_COLORS = {
         black: { btnBg: '#1a1a2e', btnBgHover: '#16213e', btnColor: '#c8c8c8', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#444444' },
         tango: { btnBg: '#2e3436', btnBgHover: '#3e4547', btnColor: '#babdb6', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#555753' },
@@ -17,9 +18,11 @@
         waltz: { btnBg: '#ececec', btnBgHover: '#d8d8d8', btnColor: '#333333', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#cccccc' },
         zomg_ponies: { btnBg: '#ececec', btnBgHover: '#d8d8d8', btnColor: '#333333', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#cccccc' }
     };
+
     const POSITIONS = ['right', 'left', 'top', 'bottom'];
     const POS_LABELS = { right: 'Справа', left: 'Слева', top: 'Сверху', bottom: 'Снизу' };
     const ICONS = ['🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','🔶','🔷','🔸','🔹','🟥','🟧','🟨','🟩','🟦','🟪','⬛','⬜','🟫','❤️','❓','💚','🇦','🇧','🇨','🇩','🇪','🇫','🇬','🇭','🇮','🇯','🇰','🇱','🇲','🇳','🇴','🇵','🇶','🇷','🇸','🇹','🇺','🇻','🇼','🇽','🇾','🇿'];
+
     const BUTTON_DEFS = {
         up: { text: '▲', title: 'Наверх', action: () => window.scrollTo({ top: 0, behavior: 'smooth' }), showSettings: true },
         forum: { text: '📋', title: 'Форум', action: (e) => { if (!e || e.button === 0) location.href = 'https://www.linux.org.ru/forum/'; }, longPressAction: 'forum' },
@@ -34,6 +37,7 @@
         help: { text: '❓', title: 'Справка', action: showHelpModal },
         toggleCode: { text: '</>', title: 'Развернуть/Свернуть весь код', action: toggleAllCodeBlocks }
     };
+
     let trackerTableUpdated = false;
     const panelContainers = { right: null, left: null, top: null, bottom: null };
     let settingsBtn = null;
@@ -49,6 +53,19 @@
     const mobileCollapsedContainers = { right: null, left: null, top: null, bottom: null };
     const mobileExpandedContainers = { right: null, left: null, top: null, bottom: null };
     let activeTooltip = null;
+    let userHasScrolled = false;
+    let userScrollTimeout = null;
+    let scrollPositionRestored = false;
+
+    window.addEventListener('scroll', function() {
+        userHasScrolled = true;
+        clearTimeout(userScrollTimeout);
+        userScrollTimeout = setTimeout(function() {
+            userHasScrolled = false;
+        }, 2000);
+        clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(saveScrollPosition, 2000);
+    }, { passive: true });
 
     function getCurrentTheme() {
         const links = document.querySelectorAll('link[rel="stylesheet"]');
@@ -58,18 +75,22 @@
         }
         return 'black';
     }
+
     function getThemeColors() {
         const theme = getCurrentTheme();
         return THEME_COLORS[theme] || THEME_COLORS['black'];
     }
+
     function getColor(key) {
         const c = getThemeColors();
         return c[key] || '';
     }
+
     function isDarkTheme() {
         const t = getCurrentTheme();
         return t === 'black' || t === 'tango';
     }
+
     function getScale(settings, force) {
         return (force || (settings.general.mobileView ? settings.general.mobileScale : settings.general.scale)) / 100;
     }
@@ -97,6 +118,7 @@
             buttonOrder: ['up','forum','tracker','toggleCode','notifications','saved','myComment','mention','blacklist','visits','down','help']
         };
     }
+
     function getSettings() {
         try {
             const saved = JSON.parse(localStorage.getItem('lor_panel_settings_v3'));
@@ -130,6 +152,7 @@
         } catch(e) {}
         return getDefaultSettings();
     }
+
     function saveSettings(s) { localStorage.setItem('lor_panel_settings_v3', JSON.stringify(s)); }
     function getBlacklist() { try { return JSON.parse(localStorage.getItem('lor_blacklist') || '[]'); } catch(e) { return []; } }
     function saveBlacklistAndNotify(list) { localStorage.setItem('lor_blacklist', JSON.stringify(list)); window.dispatchEvent(new CustomEvent('lor-blacklist-changed', { detail: { list } })); }
@@ -141,6 +164,8 @@
     function saveForumCache(d) { localStorage.setItem('lor_forum_cache', JSON.stringify(d)); }
     function getTrackerCache() { try { return JSON.parse(localStorage.getItem('lor_tracker_cache') || '{}'); } catch(e) { return {}; } }
     function saveTrackerCache(d) { localStorage.setItem('lor_tracker_cache', JSON.stringify(d)); }
+    function getScrollPositions() { try { return JSON.parse(localStorage.getItem('lor_scroll_positions') || '{}'); } catch(e) { return {}; } }
+    function saveScrollPositions(d) { localStorage.setItem('lor_scroll_positions', JSON.stringify(d)); }
 
     function getProfilePageNick() {
         if (!/\/people\/[^/]+\/profile\//.test(location.href)) return null;
@@ -148,6 +173,7 @@
         const m = txt.match(/Nick:\s*([a-zA-Zа-яА-ЯёЁ0-9_-]+)/i);
         return m ? m[1] : null;
     }
+
     function getMyNick() {
         let pl = document.querySelector('a[href*="/people/"][href*="/profile"]');
         if (pl) return pl.textContent.trim();
@@ -155,6 +181,7 @@
         if (own) { const l = own.querySelector('a[href*="/people/"]'); if (l) return l.textContent.trim(); }
         return null;
     }
+
     function getCurrentNewsAuthor() {
         let sign = document.querySelector('.sign a[href*="/people/"]');
         if (sign) return sign.textContent.trim();
@@ -164,13 +191,16 @@
         if (authorEl) return authorEl.textContent.trim();
         return null;
     }
+
     function getProfileUrl() {
         const pl = document.querySelector('a[href*="/people/"][href*="/profile"]');
         return pl ? pl.href : 'https://www.linux.org.ru/people/';
     }
+
     function getPageIdentifier() {
-        return window.location.href.replace(/[?](lastmod|page)[&](lastmod|page)=\d+/g, '');
+        return window.location.href.replace(/[?](lastmod|page|cid)[&](lastmod|page|cid)=\d+/g, '');
     }
+
     function getCommentCount() { return document.querySelectorAll('article.msg').length; }
     function isTrackerPage() { return location.href.match(/\/tracker\/?$/) !== null; }
     function sanitizeClassNick(nick) { return nick.replace(/[^a-zA-Z0-9]/g, '_'); }
@@ -197,53 +227,31 @@
         btn.addEventListener('click', function(e) { if (btn._cmjf || btn._lptr) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); return false; } if (cb) cb(e); }, true);
         return btn;
     }
+
     function createModal(title, width, content, zindex, id, onclose) {
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
         const overlay = document.createElement('div');
         overlay.id = id || '';
         overlay.className = 'lor-panel-modal-overlay';
         overlay.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:${zindex || 100000};display:flex;align-items:center;justify-content:center;`;
-
         const modal = document.createElement('div');
         modal.style.cssText = `background:${isDark ? '#0a0a14' : '#fff'};border:1px solid ${isDark ? '#333' : '#ccc'};padding:${Math.round(24 * modalScale)}px;border-radius:${Math.round(8 * modalScale)}px;width:${Math.round((width || 600) * modalScale)}px;max-height:80vh;color:${isDark ? '#ccc' : '#333'};font-family:Arial,sans-serif;font-size:${Math.round(14 * modalScale)}px;box-shadow:0 0 30px rgba(0,0,0,${isDark ? '0.8' : '0.2'});display:flex;flex-direction:column;`;
-
         const header = document.createElement('div');
         header.style.cssText = `display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid ${isDark ? '#333' : '#ccc'};`;
-
-        const titleEl = document.createElement('div');
-        titleEl.textContent = title;
-        titleEl.style.cssText = `font-size:${Math.round(16 * modalScale)}px;font-weight:bold;`;
+        const titleEl = document.createElement('div'); titleEl.textContent = title; titleEl.style.cssText = `font-size:${Math.round(16 * modalScale)}px;font-weight:bold;`;
         header.appendChild(titleEl);
-
-        const closeBtn = document.createElement('div');
-        closeBtn.textContent = '✕';
-        closeBtn.style.cssText = `cursor:pointer;font-size:${Math.round(18 * modalScale)}px;color:${isDark ? '#888' : '#666'};`;
-
-        const contentDiv = document.createElement('div');
-        contentDiv.style.cssText = 'overflow-y:auto;flex:1;min-height:200px;';
-
-        if (typeof content === 'string') contentDiv.innerHTML = content;
-        else contentDiv.appendChild(content);
-
-        const closeFn = function() {
-            overlay.remove();
-            if (onclose) onclose();
-        };
-
+        const closeBtn = document.createElement('div'); closeBtn.textContent = '✕'; closeBtn.style.cssText = `cursor:pointer;font-size:${Math.round(18 * modalScale)}px;color:${isDark ? '#888' : '#666'};`;
+        const contentDiv = document.createElement('div'); contentDiv.style.cssText = 'overflow-y:auto;flex:1;min-height:200px;';
+        if (typeof content === 'string') contentDiv.innerHTML = content; else contentDiv.appendChild(content);
+        const closeFn = function() { overlay.remove(); if (onclose) onclose(); };
         closeBtn.onclick = closeFn;
-        header.appendChild(closeBtn);
-        modal.appendChild(header);
-        modal.appendChild(contentDiv);
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-
-        overlay.onclick = function(e) {
-            if (e.target === overlay) closeFn();
-        };
+        header.appendChild(closeBtn); modal.appendChild(header);
+        modal.appendChild(contentDiv); overlay.appendChild(modal); document.body.appendChild(overlay);
+        overlay.onclick = function(e) { if (e.target === overlay) closeFn(); };
         overlay._closeLorModal = closeFn;
-
         return { overlay, modal, content: contentDiv, close: closeFn };
     }
+
     function createListRow(modalScale, isDark) {
         const row = document.createElement('div');
         row.style.cssText = `padding:${Math.round(12 * modalScale)}px;border-radius:${Math.round(4 * modalScale)}px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border:1px solid ${isDark ? '#2a2a3a' : '#e0e0e0'};transition:background 0.2s;`;
@@ -251,11 +259,13 @@
         row.onmouseleave = function() { this.style.background = ''; };
         return row;
     }
+
     function createInput(ph, modalScale, isDark) {
         const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = ph;
         inp.style.cssText = `width:100%;padding:8px 10px;background:${isDark ? '#111' : '#f5f5f5'};color:${isDark ? '#ccc' : '#333'};border:1px solid ${isDark ? '#444' : '#ccc'};border-radius:4px;font-size:${Math.round(14 * modalScale)}px;box-sizing:border-box;`;
         return inp;
     }
+
     function createActionBtn(text, type, modalScale, isDark) {
         const btn = document.createElement('button'); btn.textContent = text;
         const styles = { primary: { bg: '#0a3d6b', color: '#ddd', border: '#1a5a9a' }, danger: { bg: '#5a1a1a', color: '#ddd', border: '#8a2a2a' }, cancel: { bg: isDark ? '#2a2a3a' : '#e0e0e0', color: isDark ? '#aaa' : '#666', border: isDark ? '#444' : '#ccc' } };
@@ -273,6 +283,7 @@
         });
         settingsBtn = null; addCustomBtn = null;
     }
+
     function getOrderedButtons(settings) {
         const order = settings.buttonOrder || [], customIds = settings.customButtons.map(cb => cb.id), result = [];
         order.forEach(id => {
@@ -288,6 +299,7 @@
         customIds.forEach(id => { if (result.indexOf(id) === -1) result.push(id); });
         return result;
     }
+
     function addBtnToPanel(container, btnId, pos, settings, scale) {
         const isCustom = btnId.startsWith('custom_'), custom = isCustom ? settings.customButtons.find(cb => cb.id === btnId) : null;
         if (isCustom && !custom) return;
@@ -312,9 +324,16 @@
         if (btnId === 'notifications') updateNotificationBadge(btn);
         return btn;
     }
+
+    function updateNotificationBadge(btn) {
+        const ce = document.getElementById('main_events_count'), raw = ce ? ce.textContent : '(0)', count = parseInt(raw.replace(/[^0-9]/g, '')) || 0;
+        btn.textContent = count > 0 ? count : '🔔';
+        const settings = getSettings(), scale = getScale(settings), fs = Math.round(24 * scale);
+        btn.style.fontSize = count > 0 ? Math.round(28 * scale) + 'px' : fs + 'px'; btn.style.fontWeight = 'bold';
+    }
+
     function addDesktopPanel() {
         const settings = getSettings(), colors = getThemeColors(), scale = settings.general.scale / 100;
-        const sbw = window.innerWidth - document.documentElement.clientWidth;
         const gap = Math.round(8 * scale), padding = Math.round(8 * scale);
         cleanupPanels();
         const ordered = getOrderedButtons(settings);
@@ -344,9 +363,9 @@
             document.body.appendChild(container); panelContainers[pos] = container;
         });
         if (settings.buttons['notifications']) setInterval(() => { POSITIONS.forEach(pos => { const key = 'notifications_' + pos; if (allButtons[key]) updateNotificationBadge(allButtons[key]); }); }, 5000);
-        window.addEventListener('scroll', () => { clearTimeout(scrollTimer); scrollTimer = setTimeout(saveScrollPosition, 2000); });
         initTrackerPage();
     }
+
     function createMobilePanel() {
         const settings = getSettings(), colors = getThemeColors(), mscale = settings.general.mobileScale / 100;
         const gap = Math.round(8 * mscale), padding = Math.round(8 * mscale);
@@ -392,8 +411,8 @@
         positionMobilePanels();
         if (settings.buttons['notifications']) setInterval(() => { POSITIONS.forEach(pos => { const key = 'notifications_' + pos; if (allButtons[key]) updateNotificationBadge(allButtons[key]); }); }, 5000);
     }
+
     function positionMobilePanels() {
-        const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
         const collapsedPos = { right: { top: '25%', transform: 'translateY(-50%)', left: 'auto', right: '0px', bottom: 'auto' }, left: { top: '25%', transform: 'translateY(-50%)', left: '0px', right: 'auto', bottom: 'auto' }, top: { top: '0px', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: 'auto' }, bottom: { top: 'auto', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: '0px' } };
         const expandedPos = { right: { top: '50%', transform: 'translateY(-50%)', left: 'auto', right: '5px', bottom: 'auto' }, left: { top: '50%', transform: 'translateY(-50%)', left: '5px', right: 'auto', bottom: 'auto' }, top: { top: '5px', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: 'auto' }, bottom: { top: 'auto', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: '5px' } };
         POSITIONS.forEach(pos => {
@@ -402,6 +421,7 @@
             if (e) { for (const p in ep) e.style[p] = ep[p]; e.style.background = 'rgba(0,0,0,0.5)'; e.style.backdropFilter = 'blur(8px)'; e.style.webkitBackdropFilter = 'blur(8px)'; }
         });
     }
+
     function rebuildPanel() { cleanupPanels(); const s = getSettings(); if (s.general.mobileView) createMobilePanel(); else addDesktopPanel(); }
 
     function showBlacklistModal() {
@@ -475,7 +495,7 @@
             }
             listEl.innerHTML = '';
             if (nicks.length === 0) { const empty = document.createElement('li'); empty.textContent = 'список пуст'; empty.style.cssText = `padding:10px;color:${isDark ? '#555' : '#999'};text-align:center;font-style:italic;`; listEl.appendChild(empty); }
-            else { nicks.forEach(nick => { const data = tracked[nick]; const li = document.createElement('li'); li.style.cssText = `padding:8px 10px;border-bottom:1px solid ${isDark ? '#1a1a2e' : '#e8e8e8'};color:${isDark ? '#ccc' : '#333'};display:flex;justify-content:space-between;align-items:center;`; const left = document.createElement('div'); left.style.cssText = 'flex:1;'; const nl = document.createElement('a'); nl.textContent = nick; nl.href = '/people/' + nick + '/profile'; nl.style.cssText = 'color:#4a90d9;text-decoration:none;font-weight:bold;cursor:pointer;'; nl.onclick = e => { if (e.button === 0) modal.close(); }; nl.onmouseenter = () => { this.style.textDecoration = 'underline'; }; nl.onmouseleave = () => { this.style.textDecoration = 'none'; }; left.appendChild(nl); const vd = document.createElement('div'); vd.style.cssText = `font-size:${Math.round(12 * modalScale)}px;color:${isDark ? '#888' : '#666'};margin-top:2px;`; vd.textContent = 'Последнее посещение: ' + (data.lastVisit || 'загрузка...'); vd.className = 'lor-vt-' + sanitizeClassNick(nick); left.appendChild(vd); li.appendChild(left); const cb = document.createElement('span'); cb.textContent = '✕'; cb.style.cssText = `color:${isDark ? '#888' : '#999'};cursor:pointer;font-size:18px;padding:0 4px;margin-left:10px;`; cb.title = 'Удалить из отслеживания'; cb.onclick = () => { removeUser(nick); }; li.appendChild(cb); listEl.appendChild(li); }); }
+            else { nicks.forEach(nick => { const data = tracked[nick]; const li = document.createElement('li'); li.style.cssText = `padding:8px 10px;border-bottom:1px solid ${isDark ? '#1a1a2e' : '#e8e8e8'};color:${isDark ? '#ccc' : '#333'};display:flex;justify-content:space-between;align-items:center;`; const left = document.createElement('div'); left.style.cssText = 'flex:1;'; const nl = document.createElement('a'); nl.textContent = nick; nl.href = '/people/' + nick + '/profile'; nl.style.cssText = 'color:#4a90d9;text-decoration:none;font-weight:bold;cursor:pointer;'; nl.onclick = e => { if (e.button === 0) modal.close(); }; left.appendChild(nl); const vd = document.createElement('div'); vd.style.cssText = `font-size:${Math.round(12 * modalScale)}px;color:${isDark ? '#888' : '#666'};margin-top:2px;`; vd.textContent = 'Последнее посещение: ' + (data.lastVisit || 'загрузка...'); vd.className = 'lor-vt-' + sanitizeClassNick(nick); left.appendChild(vd); li.appendChild(left); const cb = document.createElement('span'); cb.textContent = '✕'; cb.style.cssText = `color:${isDark ? '#888' : '#999'};cursor:pointer;font-size:18px;padding:0 4px;margin-left:10px;`; cb.title = 'Удалить из отслеживания'; cb.onclick = () => { removeUser(nick); }; li.appendChild(cb); listEl.appendChild(li); }); }
             loadAll();
         }
         function loadAll() { const tracked = getTrackedUsers(), nicks = Object.keys(tracked); if (nicks.length === 0) return; nicks.forEach(nick => { fetchLastVisit(nick, vt => { tracked[nick] = { lastVisit: vt, checked: Date.now() }; saveTrackedUsers(tracked); const el = document.querySelector('.lor-vt-' + sanitizeClassNick(nick)); if (el) el.textContent = 'Последнее посещение: ' + vt; }); }); }
@@ -493,18 +513,20 @@
         const sections = [
             { title: '📌 Четыре панели', content: 'Теперь доступно 4 независимые панели: <b>справа, слева, сверху и снизу</b>. Каждая кнопка может быть включена на любой комбинации панелей.' },
             { title: '📱 Мобильный вид', content: 'При включении мобильного вида панель сворачивается в три кнопки: ▲ 🔔 ▼. <b>Свайп вниз</b> — разворачивает, <b>свайп вверх</b> — сворачивает.' },
-            { title: '📋 Кнопка "Форум"', content: '<b>ЛКМ:</b> Переход на форум. <br><b>ПКМ:</b> Список разделов с количеством новых тем.' },
-            { title: '☰ Кнопка "Трекер"', content: '<b>ЛКМ:</b> Переход в трекер. <br><b>ПКМ:</b> Список тем с количеством сообщений.' },
-            { title: '🔔 Кнопка "Уведомления"', content: '<b>ЛКМ:</b> Страница уведомлений. <br><b>ПКМ:</b> Список уведомлений. <br><b>Цифра:</b> Количество непрочитанных.' },
-            { title: '💾 Кнопка "Сохраненные"', content: '<b>ЛКМ:</b> Список сохранённых страниц. <br><b>ПКМ:</b> Сохранить текущую страницу.' },
+            { title: '📋 Кнопка "Форум"', content: '<b>ЛКМ:</b> Переход на форум.<br><b>ПКМ:</b> Список разделов с количеством новых тем.' },
+            { title: '☰ Кнопка "Трекер"', content: '<b>ЛКМ:</b> Переход в трекер.<br><b>ПКМ:</b> Список тем с количеством сообщений.' },
+            { title: '🔔 Кнопка "Уведомления"', content: '<b>ЛКМ:</b> Страница уведомлений.<br><b>ПКМ:</b> Список уведомлений.<br><b>Цифра:</b> Количество непрочитанных.' },
+            { title: '💾 Кнопка "Сохраненные"', content: '<b>ЛКМ:</b> Список сохранённых страниц.<br><b>ПКМ:</b> Сохранить текущую страницу.' },
             { title: '💬 Кнопка "Мои сообщения"', content: '<b>ЛКМ:</b> Прокрутка к вашему последнему комментарию.' },
-            { title: '🚫 Кнопка "Чёрный список"', content: '<b>ЛКМ:</b> Управление списком. <br><b>ПКМ на новости:</b> Добавить автора в список.' },
-            { title: '🕐 Кнопка "Посещения"', content: '<b>ЛКМ:</b> Список отслеживаемых пользователей. <br><b>ПКМ на новости:</b> Добавить автора в список.' },
-            { title: '⚙ Настройки', content: 'Кнопка настроек появляется при ПКМ на кнопку профиля. Можно настроить масштаб, мобильный вид, отображение кнопок.' }
+            { title: '🚫 Кнопка "Чёрный список"', content: '<b>ЛКМ:</b> Управление списком.<br><b>ПКМ на новости:</b> Добавить автора в список.' },
+            { title: '🕐 Кнопка "Посещения"', content: '<b>ЛКМ:</b> Список отслеживаемых пользователей.<br><b>ПКМ на новости:</b> Добавить автора в список.' },
+            { title: '⚙ Настройки', content: 'Кнопка настроек появляется при ПКМ на кнопку профиля. Можно настроить масштаб, мобильный вид, отображение кнопок.' },
+            { title: '📍 Сохранение позиции', content: 'Панель автоматически запоминает последний видимый комментарий и при следующем входе в тему возвращает вас к месту чтения.' }
         ];
         sections.forEach(sec => { const sd = document.createElement('div'); sd.style.cssText = 'margin-bottom:20px;'; const st = document.createElement('div'); st.textContent = sec.title; st.style.cssText = `font-weight:bold;margin-bottom:6px;color:#4a90d9;font-size:${Math.round(15 * modalScale)}px;`; sd.appendChild(st); const sc = document.createElement('div'); sc.innerHTML = sec.content; sc.style.cssText = `font-size:${Math.round(13 * modalScale)}px;line-height:1.6;padding-left:12px;border-left:2px solid ${isDark ? '#2a2a3a' : '#e0e0e0'};`; sd.appendChild(sc); content.appendChild(sd); });
         createModal('❓ Справка', 600, content, 100010, 'lor-help-overlay');
     }
+
     function showSettingsModal() {
         if (document.getElementById('lor-settings-overlay')) return;
         var settings = getSettings();
@@ -512,6 +534,7 @@
         var modalScale = settings.general.modalScale / 100;
         var overlay = document.createElement('div');
         overlay.id = 'lor-settings-overlay';
+        overlay.className = 'lor-panel-modal-overlay';
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:' + (isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)') + ';z-index:100000;display:flex;align-items:center;justify-content:center;';
         var modal = document.createElement('div');
         modal.style.cssText = 'background:' + (isDark ? '#0a0a14' : '#ffffff') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';padding:' + Math.round(24 * modalScale) + 'px;border-radius:' + Math.round(8 * modalScale) + 'px;width:' + Math.round(600 * modalScale) + 'px;color:' + (isDark ? '#ccc' : '#333') + ';font-family:Arial,sans-serif;font-size:' + Math.round(14 * modalScale) + 'px;box-shadow:0 0 30px rgba(0,0,0,' + (isDark ? '0.8' : '0.2') + ');max-height:90vh;display:flex;flex-direction:column;';
@@ -562,477 +585,170 @@
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
         var currentTab = 'general';
+
+        var closeSettings = function() { overlay.remove(); };
+        overlay._closeLorModal = closeSettings;
+
         function renderGeneralTab() {
             content.innerHTML = '';
-            var mobileDiv = document.createElement('div');
-            mobileDiv.style.cssText = 'margin-bottom:16px;';
-            var mobileLabel = document.createElement('label');
-            mobileLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
-            var mobileCheck = document.createElement('input');
-            mobileCheck.type = 'checkbox';
-            mobileCheck.id = 'lor-setting-mobile-view';
-            mobileCheck.checked = settings.general.mobileView;
-            mobileCheck.style.cssText = 'width:16px;height:16px;';
+            var mobileDiv = document.createElement('div'); mobileDiv.style.cssText = 'margin-bottom:16px;';
+            var mobileLabel = document.createElement('label'); mobileLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var mobileCheck = document.createElement('input'); mobileCheck.type = 'checkbox'; mobileCheck.id = 'lor-setting-mobile-view'; mobileCheck.checked = settings.general.mobileView; mobileCheck.style.cssText = 'width:16px;height:16px;';
             mobileLabel.appendChild(mobileCheck);
-            var mobileText = document.createElement('span');
-            mobileText.textContent = 'Мобильный вид (свайп-панель)';
-            mobileLabel.appendChild(mobileText);
-            mobileDiv.appendChild(mobileLabel);
-            content.appendChild(mobileDiv);
-            var borderDiv = document.createElement('div');
-            borderDiv.style.cssText = 'margin-bottom:16px;';
-            var borderLabel = document.createElement('label');
-            borderLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
-            var borderCheck = document.createElement('input');
-            borderCheck.type = 'checkbox';
-            borderCheck.id = 'lor-setting-border';
-            borderCheck.checked = settings.general.showBorder;
-            borderCheck.style.cssText = 'width:16px;height:16px;';
+            var mobileText = document.createElement('span'); mobileText.textContent = 'Мобильный вид (свайп-панель)'; mobileLabel.appendChild(mobileText);
+            mobileDiv.appendChild(mobileLabel); content.appendChild(mobileDiv);
+            var borderDiv = document.createElement('div'); borderDiv.style.cssText = 'margin-bottom:16px;';
+            var borderLabel = document.createElement('label'); borderLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var borderCheck = document.createElement('input'); borderCheck.type = 'checkbox'; borderCheck.id = 'lor-setting-border'; borderCheck.checked = settings.general.showBorder; borderCheck.style.cssText = 'width:16px;height:16px;';
             borderLabel.appendChild(borderCheck);
-            var borderText = document.createElement('span');
-            borderText.textContent = 'Отображать рамку панели';
-            borderLabel.appendChild(borderText);
-            borderDiv.appendChild(borderLabel);
-            content.appendChild(borderDiv);
-            var scaleDiv = document.createElement('div');
-            scaleDiv.style.cssText = 'margin-bottom:16px;';
-            var scaleLabel = document.createElement('label');
-            scaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
-            var scaleText = document.createElement('span');
-            scaleText.textContent = 'Масштаб панели:';
-            scaleLabel.appendChild(scaleText);
-            var scaleSelect = document.createElement('select');
-            scaleSelect.id = 'lor-setting-scale';
-            scaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
-            for (var s = 30; s <= 200; s += 10) {
-                var opt = document.createElement('option');
-                opt.value = s;
-                opt.textContent = s + '%';
-                if (settings.general.scale === s) opt.selected = true;
-                scaleSelect.appendChild(opt);
-            }
-            scaleLabel.appendChild(scaleSelect);
-            scaleDiv.appendChild(scaleLabel);
-            content.appendChild(scaleDiv);
-            var mobScaleDiv = document.createElement('div');
-            mobScaleDiv.style.cssText = 'margin-bottom:16px;';
-            var mobScaleLabel = document.createElement('label');
-            mobScaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
-            var mobScaleText = document.createElement('span');
-            mobScaleText.textContent = 'Масштаб в мобильном виде:';
-            mobScaleLabel.appendChild(mobScaleText);
-            var mobScaleSelect = document.createElement('select');
-            mobScaleSelect.id = 'lor-setting-mobile-scale';
-            mobScaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
-            for (var ms = 30; ms <= 300; ms += 10) {
-                var mopt = document.createElement('option');
-                mopt.value = ms;
-                mopt.textContent = ms + '%';
-                if (settings.general.mobileScale === ms) mopt.selected = true;
-                mobScaleSelect.appendChild(mopt);
-            }
-            mobScaleLabel.appendChild(mobScaleSelect);
-            mobScaleDiv.appendChild(mobScaleLabel);
-            content.appendChild(mobScaleDiv);
-            var modalScaleDiv = document.createElement('div');
-            modalScaleDiv.style.cssText = 'margin-bottom:16px;';
-            var modalScaleLabel = document.createElement('label');
-            modalScaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
-            var modalScaleText = document.createElement('span');
-            modalScaleText.textContent = 'Масштаб модальных окон:';
-            modalScaleLabel.appendChild(modalScaleText);
-            var modalScaleSelect = document.createElement('select');
-            modalScaleSelect.id = 'lor-setting-modal-scale';
-            modalScaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
-            for (var mms = 30; mms <= 200; mms += 10) {
-                var mmopt = document.createElement('option');
-                mmopt.value = mms;
-                mmopt.textContent = mms + '%';
-                if (settings.general.modalScale === mms) mmopt.selected = true;
-                modalScaleSelect.appendChild(mmopt);
-            }
-            modalScaleLabel.appendChild(modalScaleSelect);
-            modalScaleDiv.appendChild(modalScaleLabel);
-            content.appendChild(modalScaleDiv);
+            var borderText = document.createElement('span'); borderText.textContent = 'Отображать рамку панели'; borderLabel.appendChild(borderText);
+            borderDiv.appendChild(borderLabel); content.appendChild(borderDiv);
+            var scaleDiv = document.createElement('div'); scaleDiv.style.cssText = 'margin-bottom:16px;';
+            var scaleLabel = document.createElement('label'); scaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
+            var scaleText = document.createElement('span'); scaleText.textContent = 'Масштаб панели:'; scaleLabel.appendChild(scaleText);
+            var scaleSelect = document.createElement('select'); scaleSelect.id = 'lor-setting-scale'; scaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
+            for (var s = 30; s <= 200; s += 10) { var opt = document.createElement('option'); opt.value = s; opt.textContent = s + '%'; if (settings.general.scale === s) opt.selected = true; scaleSelect.appendChild(opt); }
+            scaleLabel.appendChild(scaleSelect); scaleDiv.appendChild(scaleLabel); content.appendChild(scaleDiv);
+            var mobScaleDiv = document.createElement('div'); mobScaleDiv.style.cssText = 'margin-bottom:16px;';
+            var mobScaleLabel = document.createElement('label'); mobScaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
+            var mobScaleText = document.createElement('span'); mobScaleText.textContent = 'Масштаб в мобильном виде:'; mobScaleLabel.appendChild(mobScaleText);
+            var mobScaleSelect = document.createElement('select'); mobScaleSelect.id = 'lor-setting-mobile-scale'; mobScaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
+            for (var ms = 30; ms <= 300; ms += 10) { var mopt = document.createElement('option'); mopt.value = ms; mopt.textContent = ms + '%'; if (settings.general.mobileScale === ms) mopt.selected = true; mobScaleSelect.appendChild(mopt); }
+            mobScaleLabel.appendChild(mobScaleSelect); mobScaleDiv.appendChild(mobScaleLabel); content.appendChild(mobScaleDiv);
+            var modalScaleDiv = document.createElement('div'); modalScaleDiv.style.cssText = 'margin-bottom:16px;';
+            var modalScaleLabel = document.createElement('label'); modalScaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
+            var modalScaleText = document.createElement('span'); modalScaleText.textContent = 'Масштаб модальных окон:'; modalScaleLabel.appendChild(modalScaleText);
+            var modalScaleSelect = document.createElement('select'); modalScaleSelect.id = 'lor-setting-modal-scale'; modalScaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
+            for (var mms = 30; mms <= 200; mms += 10) { var mmopt = document.createElement('option'); mmopt.value = mms; mmopt.textContent = mms + '%'; if (settings.general.modalScale === mms) mmopt.selected = true; modalScaleSelect.appendChild(mmopt); }
+            modalScaleLabel.appendChild(modalScaleSelect); modalScaleDiv.appendChild(modalScaleLabel); content.appendChild(modalScaleDiv);
         }
+
         function renderButtonsTab() {
             content.innerHTML = '';
-            var btnNames = {
-                up: '▲ Наверх', forum: '📋 Форум', tracker: '☰ Трекер', notifications: '🔔 Уведомления',
-                saved: '💾 Сохраненные', myComment: '💬 Мои сообщения', mention: '📢 Упоминания',
-                blacklist: '🚫 Чёрный список', visits: '🕐 Посещения', down: '▼ Вниз', help: '❓ Справка',
-                toggleCode: '</> Код'
-            };
+            var btnNames = { up: '▲ Наверх', forum: '📋 Форум', tracker: '☰ Трекер', notifications: '🔔 Уведомления', saved: '💾 Сохраненные', myComment: '💬 Мои сообщения', mention: '📢 Упоминания', blacklist: '🚫 Чёрный список', visits: '🕐 Посещения', down: '▼ Вниз', help: '❓ Справка', toggleCode: '</> Код' };
             var allButtonIds = settings.buttonOrder.slice();
-            for (var key in settings.buttons) {
-                if (allButtonIds.indexOf(key) === -1 && key !== 'profile') allButtonIds.push(key);
-            }
-            settings.customButtons.forEach(function(cb) {
-                if (allButtonIds.indexOf(cb.id) === -1) allButtonIds.push(cb.id);
-            });
-            for (var name in btnNames) {
-                if (allButtonIds.indexOf(name) === -1) allButtonIds.push(name);
-            }
-            var headerDiv = document.createElement('div');
-            headerDiv.style.cssText = 'display:flex;align-items:center;margin-bottom:8px;padding:0 8px;font-weight:bold;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#aaa' : '#666') + ';';
-            var nameHeader = document.createElement('span');
-            nameHeader.textContent = 'Кнопка';
-            nameHeader.style.cssText = 'flex:1;';
-            headerDiv.appendChild(nameHeader);
-            var posLabels = ['Справа', 'Слева', 'Сверху', 'Снизу'];
-            var posKeys = ['right', 'left', 'top', 'bottom'];
-            posKeys.forEach(function(pos, index) {
-                var posSpan = document.createElement('span');
-                posSpan.textContent = posLabels[index];
-                posSpan.style.cssText = 'width:55px;text-align:center;font-size:' + Math.round(11 * modalScale) + 'px;';
-                headerDiv.appendChild(posSpan);
-            });
-            var actionsHeader = document.createElement('span');
-            actionsHeader.style.cssText = 'width:60px;text-align:center;font-size:' + Math.round(11 * modalScale) + 'px;';
-            actionsHeader.textContent = 'Действ.';
-            headerDiv.appendChild(actionsHeader);
+            for (var key in settings.buttons) { if (allButtonIds.indexOf(key) === -1 && key !== 'profile') allButtonIds.push(key); }
+            settings.customButtons.forEach(function(cb) { if (allButtonIds.indexOf(cb.id) === -1) allButtonIds.push(cb.id); });
+            for (var name in btnNames) { if (allButtonIds.indexOf(name) === -1) allButtonIds.push(name); }
+            var headerDiv = document.createElement('div'); headerDiv.style.cssText = 'display:flex;align-items:center;margin-bottom:8px;padding:0 8px;font-weight:bold;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#aaa' : '#666') + ';';
+            var nameHeader = document.createElement('span'); nameHeader.textContent = 'Кнопка'; nameHeader.style.cssText = 'flex:1;'; headerDiv.appendChild(nameHeader);
+            var posLabels = ['Справа', 'Слева', 'Сверху', 'Снизу']; var posKeys = ['right', 'left', 'top', 'bottom'];
+            posKeys.forEach(function(pos, index) { var posSpan = document.createElement('span'); posSpan.textContent = posLabels[index]; posSpan.style.cssText = 'width:55px;text-align:center;font-size:' + Math.round(11 * modalScale) + 'px;'; headerDiv.appendChild(posSpan); });
+            var actionsHeader = document.createElement('span'); actionsHeader.style.cssText = 'width:60px;text-align:center;font-size:' + Math.round(11 * modalScale) + 'px;'; actionsHeader.textContent = 'Действ.'; headerDiv.appendChild(actionsHeader);
             content.appendChild(headerDiv);
-            var separator = document.createElement('div');
-            separator.style.cssText = 'border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';margin-bottom:8px;';
-            content.appendChild(separator);
-            var profileConfig = settings.buttons['profile'];
-            if (!profileConfig || typeof profileConfig !== 'object') {
-                profileConfig = { right: true, left: false, top: false, bottom: false };
-                settings.buttons['profile'] = profileConfig;
-            }
-            var profilePosition = 'right';
-            posKeys.forEach(function(pos) { if (profileConfig[pos]) profilePosition = pos; });
-            var profileDiv = document.createElement('div');
-            profileDiv.style.cssText = 'margin-bottom:10px;display:flex;align-items:center;gap:4px;padding:8px 8px;border-radius:4px;background:' + (isDark ? '#1a1a2e' : '#f0f4f8') + ';border:1px solid #4a90d9;';
-            var profileLabel = document.createElement('label');
-            profileLabel.style.cssText = 'flex:1;display:flex;align-items:center;gap:4px;font-weight:bold;';
-            var profileSpan = document.createElement('span');
-            profileSpan.textContent = '👤 Профиль';
-            profileSpan.style.cssText = 'color:#4a90d9;';
-            profileLabel.appendChild(profileSpan);
-            profileDiv.appendChild(profileLabel);
-            posKeys.forEach(function(pos, index) {
-                var radio = document.createElement('input');
-                radio.type = 'radio';
-                radio.name = 'lor-profile-position';
-                radio.className = 'lor-setting-profile-radio';
-                radio.setAttribute('data-pos', pos);
-                radio.checked = (pos === profilePosition);
-                radio.style.cssText = 'width:14px;height:14px;margin:0;cursor:pointer;accent-color:#4a90d9;';
-                radio.title = 'Профиль ' + posLabels[index];
-                radio.onchange = function() {
-                    if (this.checked) {
-                        posKeys.forEach(function(p) { settings.buttons['profile'][p] = false; });
-                        settings.buttons['profile'][pos] = true;
-                    }
-                };
-                var radioWrapper = document.createElement('div');
-                radioWrapper.style.cssText = 'width:55px;display:flex;justify-content:center;';
-                radioWrapper.appendChild(radio);
-                profileDiv.appendChild(radioWrapper);
-            });
-            var profileActions = document.createElement('div');
-            profileActions.style.cssText = 'width:60px;';
-            profileDiv.appendChild(profileActions);
-            content.appendChild(profileDiv);
-            var profileHint = document.createElement('div');
-            profileHint.style.cssText = 'margin-bottom:12px;padding:4px 8px;font-size:' + Math.round(11 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';font-style:italic;';
-            profileHint.textContent = 'Профиль всегда отображается ровно на одной панели';
-            content.appendChild(profileHint);
-            var separator2 = document.createElement('div');
-            separator2.style.cssText = 'border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';margin-bottom:10px;';
-            content.appendChild(separator2);
+            var separator = document.createElement('div'); separator.style.cssText = 'border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';margin-bottom:8px;'; content.appendChild(separator);
+            var profileConfig = settings.buttons['profile']; if (!profileConfig || typeof profileConfig !== 'object') { profileConfig = { right: true, left: false, top: false, bottom: false }; settings.buttons['profile'] = profileConfig; }
+            var profilePosition = 'right'; posKeys.forEach(function(pos) { if (profileConfig[pos]) profilePosition = pos; });
+            var profileDiv = document.createElement('div'); profileDiv.style.cssText = 'margin-bottom:10px;display:flex;align-items:center;gap:4px;padding:8px 8px;border-radius:4px;background:' + (isDark ? '#1a1a2e' : '#f0f4f8') + ';border:1px solid #4a90d9;';
+            var profileLabel = document.createElement('label'); profileLabel.style.cssText = 'flex:1;display:flex;align-items:center;gap:4px;font-weight:bold;';
+            var profileSpan = document.createElement('span'); profileSpan.textContent = '👤 Профиль'; profileSpan.style.cssText = 'color:#4a90d9;'; profileLabel.appendChild(profileSpan); profileDiv.appendChild(profileLabel);
+            posKeys.forEach(function(pos, index) { var radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'lor-profile-position'; radio.className = 'lor-setting-profile-radio'; radio.setAttribute('data-pos', pos); radio.checked = (pos === profilePosition); radio.style.cssText = 'width:14px;height:14px;margin:0;cursor:pointer;accent-color:#4a90d9;'; radio.title = 'Профиль ' + posLabels[index]; radio.onchange = function() { if (this.checked) { posKeys.forEach(function(p) { settings.buttons['profile'][p] = false; }); settings.buttons['profile'][pos] = true; } }; var radioWrapper = document.createElement('div'); radioWrapper.style.cssText = 'width:55px;display:flex;justify-content:center;'; radioWrapper.appendChild(radio); profileDiv.appendChild(radioWrapper); });
+            var profileActions = document.createElement('div'); profileActions.style.cssText = 'width:60px;'; profileDiv.appendChild(profileActions); content.appendChild(profileDiv);
+            var profileHint = document.createElement('div'); profileHint.style.cssText = 'margin-bottom:12px;padding:4px 8px;font-size:' + Math.round(11 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';font-style:italic;'; profileHint.textContent = 'Профиль всегда отображается ровно на одной панели'; content.appendChild(profileHint);
+            var separator2 = document.createElement('div'); separator2.style.cssText = 'border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';margin-bottom:10px;'; content.appendChild(separator2);
             allButtonIds.forEach(function(btnId) {
                 if (btnId === 'profile') return;
-                var isCustom = btnId.startsWith('custom_');
-                var customBtn = null;
-                if (isCustom) {
-                    customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; });
-                    if (!customBtn) return;
-                } else if (!btnNames[btnId]) return;
-                var btnConfig = settings.buttons[btnId];
-                if (!btnConfig || typeof btnConfig !== 'object') {
-                    btnConfig = { right: false, left: false, top: false, bottom: false };
-                    settings.buttons[btnId] = btnConfig;
-                }
+                var isCustom = btnId.startsWith('custom_'); var customBtn = null;
+                if (isCustom) { customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; }); if (!customBtn) return; }
+                else if (!btnNames[btnId]) return;
+                var btnConfig = settings.buttons[btnId]; if (!btnConfig || typeof btnConfig !== 'object') { btnConfig = { right: false, left: false, top: false, bottom: false }; settings.buttons[btnId] = btnConfig; }
                 var isActive = btnConfig.right || btnConfig.left || btnConfig.top || btnConfig.bottom;
-                var div = document.createElement('div');
-                div.style.cssText = 'margin-bottom:8px;display:flex;align-items:center;gap:4px;padding:6px 8px;border-radius:4px;' + (isActive ? '' : 'opacity:0.7;');
-                var label = document.createElement('label');
-                label.style.cssText = 'flex:1;display:flex;align-items:center;gap:4px;cursor:pointer;';
-                var span = document.createElement('span');
-                span.textContent = isCustom && customBtn ? customBtn.icon + ' ' + customBtn.title : btnNames[btnId] || btnId;
-                if (!isActive) span.style.textDecoration = 'line-through';
-                label.appendChild(span);
-                div.appendChild(label);
-                posKeys.forEach(function(pos, index) {
-                    var cb = document.createElement('input');
-                    cb.type = 'checkbox';
-                    cb.className = 'lor-setting-btn';
-                    cb.setAttribute('data-key', btnId);
-                    cb.setAttribute('data-pos', pos);
-                    cb.checked = btnConfig[pos] || false;
-                    cb.style.cssText = 'width:14px;height:14px;margin:0;cursor:pointer;';
-                    cb.title = posLabels[index];
-                    cb.onchange = function() {
-                        settings.buttons[btnId][pos] = this.checked;
-                        var nowActive = settings.buttons[btnId].right || settings.buttons[btnId].left || settings.buttons[btnId].top || settings.buttons[btnId].bottom;
-                        if (nowActive) { div.style.opacity = '1'; span.style.textDecoration = 'none'; }
-                        else { div.style.opacity = '0.7'; span.style.textDecoration = 'line-through'; }
-                    };
-                    var cbWrapper = document.createElement('div');
-                    cbWrapper.style.cssText = 'width:55px;display:flex;justify-content:center;';
-                    cbWrapper.appendChild(cb);
-                    div.appendChild(cbWrapper);
-                });
-                var actionsDiv = document.createElement('div');
-                actionsDiv.style.cssText = 'width:60px;display:flex;gap:4px;justify-content:center;';
-                var upBtn = document.createElement('button');
-                upBtn.textContent = '^';
-                upBtn.title = 'Поднять выше';
-                upBtn.style.cssText = 'padding:2px 8px;background:' + (isDark ? '#1a2a3a' : '#e0e0e0') + ';color:' + (isDark ? '#aaa' : '#666') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';border-radius:3px;cursor:pointer;font-size:' + Math.round(12 * modalScale) + 'px;line-height:1;';
-                upBtn.onmouseenter = function() { this.style.background = isDark ? '#2a3a4a' : '#d0d0d0'; };
-                upBtn.onmouseleave = function() { this.style.background = isDark ? '#1a2a3a' : '#e0e0e0'; };
-                upBtn.onclick = function(e) {
-                    e.stopPropagation();
-                    moveButtonUp(btnId, settings);
-                    saveSettings(settings);
-                    renderButtonsTab();
-                };
-                actionsDiv.appendChild(upBtn);
-                if (isCustom) {
-                    var delBtn = document.createElement('button');
-                    delBtn.textContent = '×';
-                    delBtn.title = 'Удалить кнопку';
-                    delBtn.style.cssText = 'padding:2px 8px;background:#5a1a1a;color:#ddd;border:1px solid #8a2a2a;border-radius:3px;cursor:pointer;font-size:' + Math.round(12 * modalScale) + 'px;line-height:1;';
-                    delBtn.onmouseenter = function() { this.style.background = '#7a2a2a'; };
-                    delBtn.onmouseleave = function() { this.style.background = '#5a1a1a'; };
-                    delBtn.onclick = function(e) {
-                        e.stopPropagation();
-                        if (confirm('Удалить кнопку "' + customBtn.title + '"?')) {
-                            settings.customButtons = settings.customButtons.filter(function(cb) { return cb.id !== btnId; });
-                            settings.buttonOrder = settings.buttonOrder.filter(function(id) { return id !== btnId; });
-                            if (settings.buttons.hasOwnProperty(btnId)) delete settings.buttons[btnId];
-                            saveSettings(settings);
-                            renderButtonsTab();
-                        }
-                    };
-                    actionsDiv.appendChild(delBtn);
-                }
-                div.appendChild(actionsDiv);
-                content.appendChild(div);
+                var div = document.createElement('div'); div.style.cssText = 'margin-bottom:8px;display:flex;align-items:center;gap:4px;padding:6px 8px;border-radius:4px;' + (isActive ? '' : 'opacity:0.7;');
+                var label = document.createElement('label'); label.style.cssText = 'flex:1;display:flex;align-items:center;gap:4px;cursor:pointer;';
+                var span = document.createElement('span'); span.textContent = isCustom && customBtn ? customBtn.icon + ' ' + customBtn.title : btnNames[btnId] || btnId; if (!isActive) span.style.textDecoration = 'line-through'; label.appendChild(span); div.appendChild(label);
+                posKeys.forEach(function(pos, index) { var cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'lor-setting-btn'; cb.setAttribute('data-key', btnId); cb.setAttribute('data-pos', pos); cb.checked = btnConfig[pos] || false; cb.style.cssText = 'width:14px;height:14px;margin:0;cursor:pointer;'; cb.title = posLabels[index]; cb.onchange = function() { settings.buttons[btnId][pos] = this.checked; var nowActive = settings.buttons[btnId].right || settings.buttons[btnId].left || settings.buttons[btnId].top || settings.buttons[btnId].bottom; if (nowActive) { div.style.opacity = '1'; span.style.textDecoration = 'none'; } else { div.style.opacity = '0.7'; span.style.textDecoration = 'line-through'; } }; var cbWrapper = document.createElement('div'); cbWrapper.style.cssText = 'width:55px;display:flex;justify-content:center;'; cbWrapper.appendChild(cb); div.appendChild(cbWrapper); });
+                var actionsDiv = document.createElement('div'); actionsDiv.style.cssText = 'width:60px;display:flex;gap:4px;justify-content:center;';
+                var upBtn = document.createElement('button'); upBtn.textContent = '^'; upBtn.title = 'Поднять выше'; upBtn.style.cssText = 'padding:2px 8px;background:' + (isDark ? '#1a2a3a' : '#e0e0e0') + ';color:' + (isDark ? '#aaa' : '#666') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';border-radius:3px;cursor:pointer;font-size:' + Math.round(12 * modalScale) + 'px;line-height:1;'; upBtn.onmouseenter = function() { this.style.background = isDark ? '#2a3a4a' : '#d0d0d0'; }; upBtn.onmouseleave = function() { this.style.background = isDark ? '#1a2a3a' : '#e0e0e0'; }; upBtn.onclick = function(e) { e.stopPropagation(); moveButtonUp(btnId, settings); saveSettings(settings); renderButtonsTab(); }; actionsDiv.appendChild(upBtn);
+                if (isCustom) { var delBtn = document.createElement('button'); delBtn.textContent = '×'; delBtn.title = 'Удалить кнопку'; delBtn.style.cssText = 'padding:2px 8px;background:#5a1a1a;color:#ddd;border:1px solid #8a2a2a;border-radius:3px;cursor:pointer;font-size:' + Math.round(12 * modalScale) + 'px;line-height:1;'; delBtn.onmouseenter = function() { this.style.background = '#7a2a2a'; }; delBtn.onmouseleave = function() { this.style.background = '#5a1a1a'; }; delBtn.onclick = function(e) { e.stopPropagation(); if (confirm('Удалить кнопку "' + customBtn.title + '"?')) { settings.customButtons = settings.customButtons.filter(function(cb) { return cb.id !== btnId; }); settings.buttonOrder = settings.buttonOrder.filter(function(id) { return id !== btnId; }); if (settings.buttons.hasOwnProperty(btnId)) delete settings.buttons[btnId]; saveSettings(settings); renderButtonsTab(); } }; actionsDiv.appendChild(delBtn); }
+                div.appendChild(actionsDiv); content.appendChild(div);
             });
-            var hint = document.createElement('div');
-            hint.style.cssText = 'margin-top:12px;padding:8px;font-size:' + Math.round(11 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';';
-            hint.innerHTML = 'Отметьте чекбоксами, на каких панелях отображать кнопки.<br>Профиль всегда на одной панели (выберите радиокнопкой).';
-            content.appendChild(hint);
+            var hint = document.createElement('div'); hint.style.cssText = 'margin-top:12px;padding:8px;font-size:' + Math.round(11 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';'; hint.innerHTML = 'Отметьте чекбоксами, на каких панелях отображать кнопки.<br>Профиль всегда на одной панели (выберите радиокнопкой).'; content.appendChild(hint);
         }
+
         function renderFilterTab() {
             content.innerHTML = '';
-            var enabledDiv = document.createElement('div');
-            enabledDiv.style.cssText = 'margin-bottom:16px;';
-            var enabledLabel = document.createElement('label');
-            enabledLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
-            var enabledCheck = document.createElement('input');
-            enabledCheck.type = 'checkbox';
-            enabledCheck.id = 'lor-filter-enabled';
-            enabledCheck.checked = settings.filter.enabled;
-            enabledCheck.style.cssText = 'width:16px;height:16px;';
+            var enabledDiv = document.createElement('div'); enabledDiv.style.cssText = 'margin-bottom:16px;';
+            var enabledLabel = document.createElement('label'); enabledLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var enabledCheck = document.createElement('input'); enabledCheck.type = 'checkbox'; enabledCheck.id = 'lor-filter-enabled'; enabledCheck.checked = settings.filter.enabled; enabledCheck.style.cssText = 'width:16px;height:16px;';
             enabledLabel.appendChild(enabledCheck);
-            var enabledText = document.createElement('span');
-            enabledText.textContent = 'Включить фильтрацию новостей по чёрному списку';
-            enabledLabel.appendChild(enabledText);
-            enabledDiv.appendChild(enabledLabel);
-            content.appendChild(enabledDiv);
-            var modeDiv = document.createElement('div');
-            modeDiv.style.cssText = 'margin-bottom:16px;';
-            var modeTitle = document.createElement('div');
-            modeTitle.textContent = 'Режим обработки:';
-            modeTitle.style.cssText = 'font-weight:bold;margin-bottom:8px;';
-            modeDiv.appendChild(modeTitle);
-            var cutLabel = document.createElement('label');
-            cutLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;';
-            var cutRadio = document.createElement('input');
-            cutRadio.type = 'radio';
-            cutRadio.name = 'lor-filter-mode';
-            cutRadio.value = 'cut';
-            cutRadio.checked = settings.filter.mode === 'cut';
-            cutRadio.style.cssText = 'width:16px;height:16px;';
+            var enabledText = document.createElement('span'); enabledText.textContent = 'Включить фильтрацию новостей по чёрному списку'; enabledLabel.appendChild(enabledText);
+            enabledDiv.appendChild(enabledLabel); content.appendChild(enabledDiv);
+            var modeDiv = document.createElement('div'); modeDiv.style.cssText = 'margin-bottom:16px;';
+            var modeTitle = document.createElement('div'); modeTitle.textContent = 'Режим обработки:'; modeTitle.style.cssText = 'font-weight:bold;margin-bottom:8px;'; modeDiv.appendChild(modeTitle);
+            var cutLabel = document.createElement('label'); cutLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;';
+            var cutRadio = document.createElement('input'); cutRadio.type = 'radio'; cutRadio.name = 'lor-filter-mode'; cutRadio.value = 'cut'; cutRadio.checked = settings.filter.mode === 'cut'; cutRadio.style.cssText = 'width:16px;height:16px;';
             cutLabel.appendChild(cutRadio);
-            var cutText = document.createElement('span');
-            cutText.innerHTML = '<b>Вырезать</b> новости (скрывать) + бесконечная лента';
-            cutLabel.appendChild(cutText);
-            modeDiv.appendChild(cutLabel);
-            var blurLabel = document.createElement('label');
-            blurLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
-            var blurRadio = document.createElement('input');
-            blurRadio.type = 'radio';
-            blurRadio.name = 'lor-filter-mode';
-            blurRadio.value = 'blur';
-            blurRadio.checked = settings.filter.mode === 'blur';
-            blurRadio.style.cssText = 'width:16px;height:16px;';
+            var cutText = document.createElement('span'); cutText.innerHTML = '<b>Вырезать</b> новости (скрывать) + бесконечная лента'; cutLabel.appendChild(cutText); modeDiv.appendChild(cutLabel);
+            var blurLabel = document.createElement('label'); blurLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var blurRadio = document.createElement('input'); blurRadio.type = 'radio'; blurRadio.name = 'lor-filter-mode'; blurRadio.value = 'blur'; blurRadio.checked = settings.filter.mode === 'blur'; blurRadio.style.cssText = 'width:16px;height:16px;';
             blurLabel.appendChild(blurRadio);
-            var blurText = document.createElement('span');
-            blurText.innerHTML = '<b>Размывать</b> новости (blur) — без бесконечной ленты';
-            blurLabel.appendChild(blurText);
-            modeDiv.appendChild(blurLabel);
-            content.appendChild(modeDiv);
-            var miniDiv = document.createElement('div');
-            miniDiv.style.cssText = 'margin-bottom:16px;';
-            var miniLabel = document.createElement('label');
-            miniLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
-            var miniCheck = document.createElement('input');
-            miniCheck.type = 'checkbox';
-            miniCheck.id = 'lor-filter-mini';
-            miniCheck.checked = settings.filter.applyToMini;
-            miniCheck.style.cssText = 'width:16px;height:16px;';
+            var blurText = document.createElement('span'); blurText.innerHTML = '<b>Размывать</b> новости (blur) — без бесконечной ленты'; blurLabel.appendChild(blurText); modeDiv.appendChild(blurLabel); content.appendChild(modeDiv);
+            var miniDiv = document.createElement('div'); miniDiv.style.cssText = 'margin-bottom:16px;';
+            var miniLabel = document.createElement('label'); miniLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var miniCheck = document.createElement('input'); miniCheck.type = 'checkbox'; miniCheck.id = 'lor-filter-mini'; miniCheck.checked = settings.filter.applyToMini; miniCheck.style.cssText = 'width:16px;height:16px;';
             miniLabel.appendChild(miniCheck);
-            var miniText = document.createElement('span');
-            miniText.textContent = 'Проверять авторов мини-новостей (через загрузку страницы)';
-            miniLabel.appendChild(miniText);
-            miniDiv.appendChild(miniLabel);
-            content.appendChild(miniDiv);
-            var animateDiv = document.createElement('div');
-            animateDiv.style.cssText = 'margin-bottom:16px;';
-            var animateLabel = document.createElement('label');
-            animateLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
-            var animateCheck = document.createElement('input');
-            animateCheck.type = 'checkbox';
-            animateCheck.id = 'lor-filter-animate';
-            animateCheck.checked = settings.filter.animateBlur;
-            animateCheck.style.cssText = 'width:16px;height:16px;';
+            var miniText = document.createElement('span'); miniText.textContent = 'Проверять авторов мини-новостей (через загрузку страницы)'; miniLabel.appendChild(miniText); miniDiv.appendChild(miniLabel); content.appendChild(miniDiv);
+            var animateDiv = document.createElement('div'); animateDiv.style.cssText = 'margin-bottom:16px;';
+            var animateLabel = document.createElement('label'); animateLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var animateCheck = document.createElement('input'); animateCheck.type = 'checkbox'; animateCheck.id = 'lor-filter-animate'; animateCheck.checked = settings.filter.animateBlur; animateCheck.style.cssText = 'width:16px;height:16px;';
             animateLabel.appendChild(animateCheck);
-            var animateText = document.createElement('span');
-            animateText.textContent = 'Анимировать появление/исчезновение блюра';
-            animateLabel.appendChild(animateText);
-            animateDiv.appendChild(animateLabel);
-            content.appendChild(animateDiv);
-            var deletedDiv = document.createElement('div');
-            deletedDiv.style.cssText = 'margin-bottom:16px;';
-            var deletedTitle = document.createElement('div');
-            deletedTitle.textContent = 'Удалённые сообщения:';
-            deletedTitle.style.cssText = 'font-weight:bold;margin-bottom:8px;';
-            deletedDiv.appendChild(deletedTitle);
-            var deletedOptions = [
-                { value: 'show', text: 'Отображать удалённые' },
-                { value: 'blur', text: 'Размывать удалённые' },
-                { value: 'hide', text: 'Не отображать удалённые' }
-            ];
-            deletedOptions.forEach(function(opt) {
-                var lbl = document.createElement('label');
-                lbl.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;';
-                var radio = document.createElement('input');
-                radio.type = 'radio';
-                radio.name = 'lor-filter-deleted-mode';
-                radio.value = opt.value;
-                radio.checked = settings.filter.deletedMode === opt.value;
-                radio.style.cssText = 'width:16px;height:16px;';
-                lbl.appendChild(radio);
-                var txt = document.createElement('span');
-                txt.textContent = opt.text;
-                lbl.appendChild(txt);
-                lbl.onclick = function() { radio.checked = true; };
-                deletedDiv.appendChild(lbl);
-            });
+            var animateText = document.createElement('span'); animateText.textContent = 'Анимировать появление/исчезновение блюра'; animateLabel.appendChild(animateText); animateDiv.appendChild(animateLabel); content.appendChild(animateDiv);
+            var deletedDiv = document.createElement('div'); deletedDiv.style.cssText = 'margin-bottom:16px;';
+            var deletedTitle = document.createElement('div'); deletedTitle.textContent = 'Удалённые сообщения:'; deletedTitle.style.cssText = 'font-weight:bold;margin-bottom:8px;'; deletedDiv.appendChild(deletedTitle);
+            var deletedOptions = [{ value: 'show', text: 'Отображать удалённые' }, { value: 'blur', text: 'Размывать удалённые' }, { value: 'hide', text: 'Не отображать удалённые' }];
+            deletedOptions.forEach(function(opt) { var lbl = document.createElement('label'); lbl.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;'; var radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'lor-filter-deleted-mode'; radio.value = opt.value; radio.checked = settings.filter.deletedMode === opt.value; radio.style.cssText = 'width:16px;height:16px;'; lbl.appendChild(radio); var txt = document.createElement('span'); txt.textContent = opt.text; lbl.appendChild(txt); lbl.onclick = function() { radio.checked = true; }; deletedDiv.appendChild(lbl); });
             content.appendChild(deletedDiv);
-            var hint = document.createElement('div');
-            hint.style.cssText = 'margin-top:20px;padding:10px;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';background:' + (isDark ? '#1a1a2e' : '#f5f5f5') + ';border-radius:4px;';
-            hint.innerHTML = '<b>Примечание:</b> Режим «Вырезать» включает бесконечную ленту новостей. Режим «Размывать» только скрывает контент визуально, лента не подгружается. Настройки применяются сразу после сохранения.';
-            content.appendChild(hint);
+            var hint = document.createElement('div'); hint.style.cssText = 'margin-top:20px;padding:10px;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';background:' + (isDark ? '#1a1a2e' : '#f5f5f5') + ';border-radius:4px;'; hint.innerHTML = '<b>Примечание:</b> Режим «Вырезать» включает бесконечную ленту новостей. Режим «Размывать» только скрывает контент визуально, лента не подгружается. Настройки применяются сразу после сохранения.'; content.appendChild(hint);
         }
+
         function renderHelpTab() {
             content.innerHTML = '';
             var helpSections = [
                 { title: '📌 Четыре панели', content: 'Теперь доступно 4 независимые панели: <b>справа, слева, сверху и снизу</b>. Каждая кнопка может быть включена на любой комбинации панелей. Настройка производится во вкладке "Кнопки" (чекбоксы Справа/Слева/Сверху/Снизу). Панель не создаётся, если на ней нет активных кнопок (кроме профиля).' },
                 { title: '📱 Мобильный вид', content: 'При включении мобильного вида панель сворачивается в три кнопки: ▲ 🔔 ▼. <b>Свайп вниз</b> по области панели — разворачивает все кнопки. <b>Свайп вверх</b> по любой иконке — сворачивает обратно. В мобильном виде работает отдельный масштаб.' },
-                { title: '📋 Кнопка "Форум"', content: '<b>ЛКМ:</b> Переход на главную страницу форума. <br><b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком разделов форума. Для каждого раздела показывается количество новых тем за сутки. Если количество изменилось по сравнению с предыдущей проверкой, раздел подсвечивается зелёным и показывает количество новых тем. <br><b>ЛКМ по разделу:</b> Переход в раздел. <br><b>Колесо по разделу:</b> Открыть раздел в новой вкладке.' },
-                { title: '☰ Кнопка "Трекер"', content: '<b>ЛКМ:</b> Переход на главную страницу трекера. <br><b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком последних тем трекера. Для каждой темы показывается количество сообщений. Если количество изменилось, тема подсвечивается зелёным и показывает количество новых сообщений. <br><b>ЛКМ по теме:</b> Переход в тему. <br><b>Колесо по теме:</b> Открыть тему в новой вкладке.' },
-                { title: '🔔 Кнопка "Уведомления"', content: '<b>ЛКМ:</b> Переход на страницу уведомлений. <br><b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком всех уведомлений. Показываются категории (Новости, Форум, Трекер), теги и время. <br><b>ЛКМ по уведомлению:</b> Переход по ссылке. <br><b>Колесо по уведомлению:</b> Открыть в новой вкладке. <br><b>Цифра на кнопке:</b> Количество непрочитанных уведомлений.' },
-                { title: '💾 Кнопка "Сохраненные"', content: '<b>ЛКМ:</b> Открывает модальное окно со списком сохранённых страниц. Для каждой страницы автоматически проверяется наличие новых комментариев. При обнаружении новых комментариев страница подсвечивается зелёным и показывает количество новых сообщений. <br><b>ПКМ (долгое нажатие):</b> Сохраняет текущую страницу. Запоминается URL, заголовок, количество комментариев и позиция скролла. При первом заходе на сохранённую страницу после перезагрузки автоматически восстанавливается позиция скролла. Позиция обновляется автоматически при скролле через 2 секунды после остановки. <br><b>ЛКМ по сохранённой странице:</b> Переход на страницу. <br><b>Колесо по сохранённой странице:</b> Открыть в новой вкладке. <br><b>ПКМ по сохранённой странице:</b> Удалить из списка.' },
+                { title: '📋 Кнопка "Форум"', content: '<b>ЛКМ:</b> Переход на главную страницу форума.<br><b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком разделов форума. Для каждого раздела показывается количество новых тем за сутки. Если количество изменилось по сравнению с предыдущей проверкой, раздел подсвечивается зелёным и показывает количество новых тем.<br><b>ЛКМ по разделу:</b> Переход в раздел.<br><b>Колесо по разделу:</b> Открыть раздел в новой вкладке.' },
+                { title: '☰ Кнопка "Трекер"', content: '<b>ЛКМ:</b> Переход на главную страницу трекера.<br><b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком последних тем трекера. Для каждой темы показывается количество сообщений. Если количество изменилось, тема подсвечивается зелёным и показывает количество новых сообщений.<br><b>ЛКМ по теме:</b> Переход в тему.<br><b>Колесо по теме:</b> Открыть тему в новой вкладке.' },
+                { title: '🔔 Кнопка "Уведомления"', content: '<b>ЛКМ:</b> Переход на страницу уведомлений.<br><b>ПКМ (долгое нажатие):</b> Открывает модальное окно со списком всех уведомлений. Показываются категории (Новости, Форум, Трекер), теги и время.<br><b>ЛКМ по уведомлению:</b> Переход по ссылке.<br><b>Колесо по уведомлению:</b> Открыть в новой вкладке.<br><b>Цифра на кнопке:</b> Количество непрочитанных уведомлений.' },
+                { title: '💾 Кнопка "Сохраненные"', content: '<b>ЛКМ:</b> Открывает модальное окно со списком сохранённых страниц. Для каждой страницы автоматически проверяется наличие новых комментариев. При обнаружении новых комментариев страница подсвечивается зелёным и показывает количество новых сообщений.<br><b>ПКМ (долгое нажатие):</b> Сохраняет текущую страницу. Запоминается URL, заголовок, количество комментариев и позиция скролла. При первом заходе на сохранённую страницу после перезагрузки автоматически восстанавливается позиция скролла. Позиция обновляется автоматически при скролле через 2 секунды после остановки.<br><b>ЛКМ по сохранённой странице:</b> Переход на страницу.<br><b>Колесо по сохранённой странице:</b> Открыть в новой вкладке.<br><b>ПКМ по сохранённой странице:</b> Удалить из списка.' },
                 { title: '💬 Кнопка "Мои сообщения"', content: '<b>ЛКМ:</b> Прокручивает страницу к вашему последнему комментарию и подсвечивает его синей рамкой на 3 секунды.' },
                 { title: '📢 Кнопка "Упоминания"', content: '<b>ЛКМ:</b> Прокручивает страницу к последнему упоминанию вашего ника и подсвечивает его оранжевой рамкой на 3 секунды.' },
-                { title: '🚫 Кнопка "Чёрный список"', content: '<b>ЛКМ:</b> Открывает модальное окно управления чёрным списком авторов. Можно добавлять и удалять ники. <br><b>ПКМ (долгое нажатие) на странице новости:</b> Автоматически добавляет автора текущей новости в чёрный список.' },
-                { title: '🕐 Кнопка "Посещения"', content: '<b>ЛКМ:</b> Открывает модальное окно со списком отслеживаемых пользователей и датами их последних посещений. Имена кликабельны — ведут в профиль. <br><b>ПКМ (долгое нажатие):</b> Добавляет автора текущей новости/темы в список отслеживаемых. В модальном окне можно вручную добавить/удалить пользователей и обновить данные. <br><b>Наведение на ник в "Ответ на":</b> Показывает всплывающую подсказку с датой последнего посещения пользователя (загружается с его профиля).' },
+                { title: '🚫 Кнопка "Чёрный список"', content: '<b>ЛКМ:</b> Открывает модальное окно управления чёрным списком авторов. Можно добавлять и удалять ники.<br><b>ПКМ (долгое нажатие) на странице новости:</b> Автоматически добавляет автора текущей новости в чёрный список.' },
+                { title: '🕐 Кнопка "Посещения"', content: '<b>ЛКМ:</b> Открывает модальное окно со списком отслеживаемых пользователей и датами их последних посещений. Имена кликабельны — ведут в профиль.<br><b>ПКМ (долгое нажатие):</b> Добавляет автора текущей новости/темы в список отслеживаемых. В модальном окне можно вручную добавить/удалить пользователей и обновить данные.<br><b>Наведение на ник в "Ответ на":</b> Показывает всплывающую подсказку с датой последнего посещения пользователя (загружается с его профиля).' },
                 { title: '❓ Кнопка "Справка"', content: 'Открывает окно справки по всем функциям. По умолчанию находится только на левой панели.' },
                 { title: '➕ Пользовательские кнопки', content: 'Вы можете добавить свои кнопки с произвольными ссылками. Нажмите ПКМ на кнопку профиля, затем на "+" и введите URL, название и выберите иконку. Кнопка появится на панели. В настройках можно изменить порядок кнопок или удалить пользовательские.' },
-                { title: '👤 Кнопка "Профиль"', content: '<b>ЛКМ:</b> Переход в ваш профиль. <br><b>ПКМ:</b> Показывает кнопку настроек (⚙) и кнопку добавления (+).' },
-                { title: '⚙ Настройки', content: 'Кнопка настроек появляется при ПКМ на кнопку профиля. В настройках можно: <br>• Включить мобильный вид со свайп-панелью <br>• Выбрать ориентацию панели (вертикально/горизонтально) <br>• Включить/отключить отображение рамки панели <br>• Настроить масштаб панели (30-200%) <br>• Настроить масштаб мобильной панели (30-300%) <br>• Настроить масштаб модальных окон (30-200%) <br>• Выбрать, на каких панелях (справа/слева/сверху/снизу) отображать каждую кнопку <br>• Изменить порядок кнопок (кнопка ^) <br>• Удалить пользовательские кнопки (кнопка -) <br>• Настроить режим фильтрации новостей (вырезать/блюрить)' },
+                { title: '👤 Кнопка "Профиль"', content: '<b>ЛКМ:</b> Переход в ваш профиль.<br><b>ПКМ:</b> Показывает кнопку настроек (⚙) и кнопку добавления (+).' },
+                { title: '⚙ Настройки', content: 'Кнопка настроек появляется при ПКМ на кнопку профиля. В настройках можно:<br>• Включить мобильный вид со свайп-панелью<br>• Выбрать ориентацию панели (вертикально/горизонтально)<br>• Включить/отключить отображение рамки панели<br>• Настроить масштаб панели (30-200%)<br>• Настроить масштаб мобильной панели (30-300%)<br>• Настроить масштаб модальных окон (30-200%)<br>• Выбрать, на каких панелях (справа/слева/сверху/снизу) отображать каждую кнопку<br>• Изменить порядок кнопок (кнопка ^)<br>• Удалить пользовательские кнопки (кнопка -)<br>• Настроить режим фильтрации новостей (вырезать/блюрить)' },
+                { title: '📍 Сохранение позиции', content: 'Панель автоматически запоминает последний видимый комментарий при чтении темы. При следующем открытии темы вы вернётесь к тому месту, где остановились. Также корректно обрабатываются переходы по ссылкам ?cid= и ?lastmod=, включая случаи с удалёнными комментариями.' },
                 { title: '📊 Новые комментарии в трекере', content: 'На странице трекера добавляется колонка "Новых", которая показывает количество новых комментариев в темах с момента последнего посещения. Данные сохраняются в localStorage и обновляются при каждом заходе на страницу. Темы с новыми комментариями подсвечиваются зелёным фоном.' },
                 { title: '🎨 Темы оформления', content: 'Панель и все модальные окна автоматически подстраиваются под текущую тему сайта (black, tango, tango-light, white2, waltz, zomg_ponies). Цвета фона, текста и границ соответствуют выбранной теме.' },
                 { title: '🖱 Долгое нажатие мыши', content: 'На десктопе: удержание левой кнопки мыши на любой иконке панели в течение 500 мс эмулирует нажатие правой кнопки мыши (контекстное меню / альтернативное действие). Если начать движение мыши во время удержания (более 5px), долгое нажатие отменяется.' }
             ];
             helpSections.forEach(function(section) {
-                var sectionDiv = document.createElement('div');
-                sectionDiv.style.cssText = 'margin-bottom:' + Math.round(20 * modalScale) + 'px;';
-                var sectionTitle = document.createElement('div');
-                sectionTitle.textContent = section.title;
-                sectionTitle.style.cssText = 'font-size:' + Math.round(16 * modalScale) + 'px;font-weight:bold;margin-bottom:' + Math.round(8 * modalScale) + 'px;color:#4a90d9;';
+                var sectionDiv = document.createElement('div'); sectionDiv.style.cssText = 'margin-bottom:' + Math.round(20 * modalScale) + 'px;';
+                var sectionTitle = document.createElement('div'); sectionTitle.textContent = section.title; sectionTitle.style.cssText = 'font-size:' + Math.round(16 * modalScale) + 'px;font-weight:bold;margin-bottom:' + Math.round(8 * modalScale) + 'px;color:#4a90d9;';
                 sectionDiv.appendChild(sectionTitle);
-                var sectionContent = document.createElement('div');
-                sectionContent.innerHTML = section.content;
-                sectionContent.style.cssText = 'font-size:' + Math.round(13 * modalScale) + 'px;line-height:1.6;color:' + (isDark ? '#bbb' : '#444') + ';padding-left:' + Math.round(8 * modalScale) + 'px;border-left:2px solid ' + (isDark ? '#2a2a3a' : '#e0e0e0') + ';';
-                sectionDiv.appendChild(sectionContent);
-                content.appendChild(sectionDiv);
+                var sectionContent = document.createElement('div'); sectionContent.innerHTML = section.content; sectionContent.style.cssText = 'font-size:' + Math.round(13 * modalScale) + 'px;line-height:1.6;color:' + (isDark ? '#bbb' : '#444') + ';padding-left:' + Math.round(8 * modalScale) + 'px;border-left:2px solid ' + (isDark ? '#2a2a3a' : '#e0e0e0') + ';';
+                sectionDiv.appendChild(sectionContent); content.appendChild(sectionDiv);
             });
-            var footerHelp = document.createElement('div');
-            footerHelp.style.cssText = 'margin-top:' + Math.round(20 * modalScale) + 'px;padding-top:' + Math.round(12 * modalScale) + 'px;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;';
-            footerHelp.textContent = 'NSLorPanel v5.0 • Все данные хранятся в localStorage вашего браузера';
-            content.appendChild(footerHelp);
+            var footerHelp = document.createElement('div'); footerHelp.style.cssText = 'margin-top:' + Math.round(20 * modalScale) + 'px;padding-top:' + Math.round(12 * modalScale) + 'px;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;'; footerHelp.textContent = 'NSLorPanel v5.0 • Все данные хранятся в localStorage вашего браузера'; content.appendChild(footerHelp);
         }
+
         renderGeneralTab();
-        tabGeneral.onclick = function() {
-            currentTab = 'general';
-            tabGeneral.style.borderBottomColor = '#4a90d9'; tabGeneral.style.color = '#4a90d9'; tabGeneral.style.fontWeight = 'bold';
-            tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal';
-            tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal';
-            tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal';
-            renderGeneralTab();
-        };
-        tabButtons.onclick = function() {
-            currentTab = 'buttons';
-            tabButtons.style.borderBottomColor = '#4a90d9'; tabButtons.style.color = '#4a90d9'; tabButtons.style.fontWeight = 'bold';
-            tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal';
-            tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal';
-            tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal';
-            renderButtonsTab();
-        };
-        tabFilter.onclick = function() {
-            currentTab = 'filter';
-            tabFilter.style.borderBottomColor = '#4a90d9'; tabFilter.style.color = '#4a90d9'; tabFilter.style.fontWeight = 'bold';
-            tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal';
-            tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal';
-            tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal';
-            renderFilterTab();
-        };
-        tabHelp.onclick = function() {
-            currentTab = 'help';
-            tabHelp.style.borderBottomColor = '#4a90d9'; tabHelp.style.color = '#4a90d9'; tabHelp.style.fontWeight = 'bold';
-            tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal';
-            tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal';
-            tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal';
-            renderHelpTab();
-        };
+        tabGeneral.onclick = function() { currentTab = 'general'; tabGeneral.style.borderBottomColor = '#4a90d9'; tabGeneral.style.color = '#4a90d9'; tabGeneral.style.fontWeight = 'bold'; tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal'; tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal'; tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal'; renderGeneralTab(); };
+        tabButtons.onclick = function() { currentTab = 'buttons'; tabButtons.style.borderBottomColor = '#4a90d9'; tabButtons.style.color = '#4a90d9'; tabButtons.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal'; tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal'; renderButtonsTab(); };
+        tabFilter.onclick = function() { currentTab = 'filter'; tabFilter.style.borderBottomColor = '#4a90d9'; tabFilter.style.color = '#4a90d9'; tabFilter.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal'; tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal'; renderFilterTab(); };
+        tabHelp.onclick = function() { currentTab = 'help'; tabHelp.style.borderBottomColor = '#4a90d9'; tabHelp.style.color = '#4a90d9'; tabHelp.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal'; tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal'; renderHelpTab(); };
+
         saveBtn.onclick = function() {
-            var mobileViewCheck = document.getElementById('lor-setting-mobile-view');
-            var borderCheck = document.getElementById('lor-setting-border');
-            var scaleSelect = document.getElementById('lor-setting-scale');
-            var mobileScaleSelect = document.getElementById('lor-setting-mobile-scale');
-            var modalScaleSelect = document.getElementById('lor-setting-modal-scale');
+            var mobileViewCheck = document.getElementById('lor-setting-mobile-view'); var borderCheck = document.getElementById('lor-setting-border'); var scaleSelect = document.getElementById('lor-setting-scale'); var mobileScaleSelect = document.getElementById('lor-setting-mobile-scale'); var modalScaleSelect = document.getElementById('lor-setting-modal-scale');
             if (mobileViewCheck) settings.general.mobileView = mobileViewCheck.checked;
             if (borderCheck) settings.general.showBorder = borderCheck.checked;
             if (scaleSelect) { var val = parseInt(scaleSelect.value); if (val >= 30 && val <= 200) settings.general.scale = val; }
             if (mobileScaleSelect) { var mval = parseInt(mobileScaleSelect.value); if (mval >= 30 && mval <= 300) settings.general.mobileScale = mval; }
             if (modalScaleSelect) { var mmval = parseInt(modalScaleSelect.value); if (mmval >= 30 && mmval <= 200) settings.general.modalScale = mmval; }
             var btnChecks = document.querySelectorAll('.lor-setting-btn');
-            btnChecks.forEach(function(cb) {
-                var key = cb.getAttribute('data-key'); var pos = cb.getAttribute('data-pos');
-                if (!settings.buttons[key] || typeof settings.buttons[key] !== 'object') settings.buttons[key] = { right: false, left: false, top: false, bottom: false };
-                settings.buttons[key][pos] = cb.checked;
-            });
-            var filterEnabled = document.getElementById('lor-filter-enabled');
-            var filterMode = document.querySelector('input[name="lor-filter-mode"]:checked');
-            var filterMini = document.getElementById('lor-filter-mini');
-            var filterAnimate = document.getElementById('lor-filter-animate');
+            btnChecks.forEach(function(cb) { var key = cb.getAttribute('data-key'); var pos = cb.getAttribute('data-pos'); if (!settings.buttons[key] || typeof settings.buttons[key] !== 'object') settings.buttons[key] = { right: false, left: false, top: false, bottom: false }; settings.buttons[key][pos] = cb.checked; });
+            var filterEnabled = document.getElementById('lor-filter-enabled'); var filterMode = document.querySelector('input[name="lor-filter-mode"]:checked'); var filterMini = document.getElementById('lor-filter-mini'); var filterAnimate = document.getElementById('lor-filter-animate');
             if (filterEnabled) settings.filter.enabled = filterEnabled.checked;
             if (filterMode) settings.filter.mode = filterMode.value;
             if (filterMini) settings.filter.applyToMini = filterMini.checked;
@@ -1041,12 +757,13 @@
             if (deletedModeRadio) settings.filter.deletedMode = deletedModeRadio.value;
             saveSettings(settings);
             window.dispatchEvent(new CustomEvent('lor-filter-settings-changed', { detail: { settings: settings.filter } }));
-            overlay.remove();
+            closeSettings();
             rebuildPanel();
         };
-        cancelBtn.onclick = function() { overlay.remove(); };
-        overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+        cancelBtn.onclick = closeSettings;
+        overlay.onclick = function(e) { if (e.target === overlay) closeSettings(); };
     }
+
     function showAddCustomModal() {
         if (document.getElementById('lor-add-custom-overlay')) return;
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -1068,6 +785,7 @@
         urlInp.addEventListener('keydown', e => { if (e.key === 'Enter') addCustom(); });
         titleInp.addEventListener('keydown', e => { if (e.key === 'Enter') addCustom(); });
     }
+
     function showSavedPagesModal() {
         if (currentModal) { currentModal.remove(); currentModal = null; }
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme(), sp = getSavedPages();
@@ -1096,6 +814,7 @@
         }
         createModal('Сохраненные страницы', 700, content, 100003);
     }
+
     function showForumModal() {
         if (currentModal) { currentModal.remove(); currentModal = null; }
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -1126,6 +845,7 @@
             content.appendChild(list); saveForumCache(cache); if (hasCh) highlightButton('forum');
         });
     }
+
     function showTrackerModal() {
         if (currentModal) { currentModal.remove(); currentModal = null; }
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -1158,6 +878,7 @@
             content.appendChild(list); saveTrackerCache(ncache); if (hasCh) highlightButton('tracker');
         });
     }
+
     function showNotificationsModal() {
         if (currentModal) { currentModal.remove(); currentModal = null; }
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -1190,16 +911,19 @@
         links.forEach(lnk => { const href = lnk.href; if (href.match(/\/forum\/[^/]+\/$/) && !sections.find(s => s.url === href)) { const par = lnk.closest('li'), txt = par ? par.textContent : lnk.textContent, cm = txt.match(/((\d+)\s+за\s+сутки)/), cnt = cm ? parseInt(cm[1]) : 0; sections.push({ url: href, title: lnk.textContent.trim(), description: par ? (par.querySelector('em') ? par.querySelector('em').textContent : '') : '', dailyCount: cnt }); } });
         return sections;
     }
+
     function parseTrackerTopics(html) {
         const doc = new DOMParser().parseFromString(html, 'text/html'), topics = [], rows = doc.querySelectorAll('table.message-table tbody tr');
         rows.forEach(row => { if (row.querySelector('th')) return; const cells = row.querySelectorAll('td'); if (cells.length >= 4) { const gl = cells[0].querySelector('a'), tl = cells[1].querySelector('a'), ct = cells[3].textContent.trim(), cnt = parseInt(ct) || 0; if (tl) { const tags = []; cells[1].querySelectorAll('.tag').forEach(t => { tags.push(t.textContent.trim()); }); const ft = tl.textContent.trim(), parts = ft.split('\n').map(p => p.trim()).filter(p => p), mt = parts[parts.length - 1] || ft; topics.push({ url: tl.href, title: mt, tags: tags, group: gl ? gl.textContent.trim() : cells[0].textContent.trim(), messageCount: cnt }); } } });
         return topics;
     }
+
     function parseNotifications(html) {
         const doc = new DOMParser().parseFromString(html, 'text/html'), notifs = [], rows = doc.querySelectorAll('table.message-table tbody tr');
         rows.forEach(row => { const lnk = row.querySelector('td:nth-child(2) a'), tm = row.querySelector('time'); if (lnk) { const tags = []; lnk.querySelectorAll('.tag').forEach(t => { tags.push(t.textContent.trim()); }); const ft = row.textContent.trim(), cm = ft.match(/((Новости|Форум|Трекер|Галерея|Статьи))/), cat = cm ? cm[1] : ''; notifs.push({ url: lnk.href, title: lnk.textContent.trim(), tags: tags, category: cat, time: tm ? tm.textContent.trim() : '' }); } });
         return notifs;
     }
+
     function updateTrackerTable() {
         if (trackerTableUpdated) return;
         const table = document.querySelector('table.message-table'); if (!table) return; if (!isTrackerPage()) return;
@@ -1211,98 +935,214 @@
         rows.forEach(row => { if (row.querySelector('th')) return; const cells = row.querySelectorAll('td'); if (cells.length < 4) return; const tl = cells[1].querySelector('a'); if (!tl) return; const curl = tl.href.replace(/[?&]lastmod=\d+/g, ''), cc = parseInt(cells[3].textContent.trim()) || 0; clean[curl] = { count: cc, date: now }; });
         saveTrackerCache(clean); trackerTableUpdated = true; if (hasCh) highlightButton('tracker');
     }
+
     function initTrackerPage() { if (isTrackerPage() && !trackerTableUpdated) { setTimeout(() => { if (document.querySelector('table.message-table tbody tr')) updateTrackerTable(); }, 100); } }
 
     function fetchLastVisit(nick, cb) {
         fetch(new URL('/people/' + nick + '/profile', window.location.origin).href).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(html => { const idx = html.indexOf('Последнее посещение'); if (idx === -1) { if (cb) cb('неизвестно'); return; } const snip = html.substring(idx, idx + 200); const tm = snip.match(/<time[^>]*>([^<]+)<\/time>/); if (tm) { if (cb) cb(tm[1].trim()); return; } const m = html.match(/<b>Последнее посещение:<\/b>\s*<time[^>]*>([^<]+)<\/time>/); if (cb) cb(m ? m[1].trim() : 'неизвестно'); }).catch(err => { console.log('NSLorPanel: ошибка ' + nick + ' - ' + err.message); if (cb) cb('ошибка'); });
     }
+
     function goToMyLastComment() {
         const nick = getMyNick(); if (!nick) { alert('Не удалось определить ник.'); return; }
         let last = null; document.querySelectorAll('article.msg').forEach(c => { const a = c.querySelector('a[href*="/people/"]'); if (a && a.textContent.trim() === nick) last = c; });
         if (last) { last.scrollIntoView({ behavior: 'smooth', block: 'start' }); last.style.outline = '3px solid #4a90d9'; setTimeout(() => { last.style.outline = ''; }, 3000); }
         else { alert('Ваших комментариев на этой странице нет.'); }
     }
+
     function goToLastMention() {
         const nick = getMyNick(); if (!nick) { alert('Не удалось определить ник.'); return; }
         let last = null; document.querySelectorAll('article.msg').forEach(c => { const a = c.querySelector('a[href*="/people/"]'); const author = a ? a.textContent.trim() : ''; if (author !== nick && c.textContent.includes(nick)) last = c; });
         if (last) { last.scrollIntoView({ behavior: 'smooth', block: 'start' }); last.style.outline = '3px solid #ff6600'; setTimeout(() => { last.style.outline = ''; }, 3000); }
         else { alert('Упоминаний вас на этой странице нет.'); }
     }
+
     function toggleAllCodeBlocks() {
-        let anchor = null;
-        let anchorVisualTop = 0;
+        let anchor = null; let anchorVisualTop = 0;
         const articles = document.querySelectorAll('article.msg');
-        for (let i = 0; i < articles.length; i++) {
-            const rect = articles[i].getBoundingClientRect();
-            if (rect.bottom > 0 && rect.top < window.innerHeight * 0.6) {
-                anchor = articles[i];
-                anchorVisualTop = rect.top;
-                break;
-            }
-        }
+        for (let i = 0; i < articles.length; i++) { const rect = articles[i].getBoundingClientRect(); if (rect.bottom > 0 && rect.top < window.innerHeight * 0.6) { anchor = articles[i]; anchorVisualTop = rect.top; break; } }
         const blocks = document.querySelectorAll('div.code');
         if (!blocks.length) return;
-        let spoiledCount = 0;
-        blocks.forEach(b => { if (b.classList.contains('spoiled')) spoiledCount++; });
+        let spoiledCount = 0; blocks.forEach(b => { if (b.classList.contains('spoiled')) spoiledCount++; });
         const shouldExpand = spoiledCount >= Math.ceil(blocks.length / 2);
         blocks.forEach(block => {
-            if (shouldExpand) {
-                if (block.classList.contains('spoiled')) {
-                    block.classList.remove('spoiled');
-                    block.classList.add('unspoiled');
-                    const wrap = block.querySelector('.spoiler-open');
-                    if (wrap) wrap.style.display = 'none';
-                    block.style.maxHeight = 'none';
-                    block.style.overflow = 'visible';
-                }
-            } else {
-                if (!block.classList.contains('spoiled')) {
-                    block.classList.remove('unspoiled');
-                    block.classList.add('spoiled');
-                    let wrap = block.querySelector('.spoiler-open');
-                    if (!wrap) {
-                        wrap = document.createElement('div');
-                        wrap.className = 'spoiler-open';
-                        wrap.innerHTML = '<span class="btn btn-small btn-default spoiler-button">Развернуть</span>';
-                        block.appendChild(wrap);
+            if (shouldExpand) { if (block.classList.contains('spoiled')) { block.classList.remove('spoiled'); block.classList.add('unspoiled'); const wrap = block.querySelector('.spoiler-open'); if (wrap) wrap.style.display = 'none'; block.style.maxHeight = 'none'; block.style.overflow = 'visible'; } }
+            else { if (!block.classList.contains('spoiled')) { block.classList.remove('unspoiled'); block.classList.add('spoiled'); let wrap = block.querySelector('.spoiler-open'); if (!wrap) { wrap = document.createElement('div'); wrap.className = 'spoiler-open'; wrap.innerHTML = '<span class="btn btn-small btn-default spoiler-button">Развернуть</span>'; block.appendChild(wrap); } wrap.style.display = ''; block.style.maxHeight = ''; block.style.overflow = ''; } }
+        });
+        requestAnimationFrame(() => { requestAnimationFrame(() => { if (anchor && document.body.contains(anchor)) { const newRect = anchor.getBoundingClientRect(); const delta = newRect.top - anchorVisualTop; window.scrollTo(0, window.scrollY + delta); } }); });
+    }
+
+    function scrollToComment(commentId) {
+        if (!commentId || scrollPositionRestored) return;
+        if (userHasScrolled) return;
+        const isTopic = commentId.startsWith('topic-');
+        const elementId = isTopic ? commentId : 'comment-' + commentId;
+        const element = document.getElementById(elementId);
+        if (element) {
+            scrollPositionRestored = true;
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.style.outline = '3px solid #4a90d9';
+            element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
+            setTimeout(function() {
+                element.style.outline = '';
+                element.style.backgroundColor = '';
+            }, 3000);
+        }
+    }
+
+    function restoreScrollPosition() {
+        if (userHasScrolled) return;
+
+        try {
+            var pendingRaw = localStorage.getItem('lor_pending_scroll_target');
+            if (pendingRaw) {
+                var pending = JSON.parse(pendingRaw);
+                var currentPath = window.location.pathname;
+                if (pending.topicPath === currentPath && pending.commentId) {
+                    localStorage.removeItem('lor_pending_scroll_target');
+                    var isTopic = pending.commentId.startsWith('topic-');
+                    var elementId = isTopic ? pending.commentId : 'comment-' + pending.commentId;
+                    var element = document.getElementById(elementId);
+                    if (element) {
+                        scrollPositionRestored = true;
+                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        element.style.outline = '3px solid #4a90d9';
+                        element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
+                        setTimeout(function() {
+                            element.style.outline = '';
+                            element.style.backgroundColor = '';
+                        }, 3000);
+                        return;
                     }
-                    wrap.style.display = '';
-                    block.style.maxHeight = '';
-                    block.style.overflow = '';
+                } else {
+                    localStorage.removeItem('lor_pending_scroll_target');
                 }
             }
-        });
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                if (anchor && document.body.contains(anchor)) {
-                    const newRect = anchor.getBoundingClientRect();
-                    const delta = newRect.top - anchorVisualTop;
-                    window.scrollTo(0, window.scrollY + delta);
+        } catch(e) {}
+
+        var urlParams = new URLSearchParams(window.location.search);
+        var cidParam = urlParams.get('cid');
+        if (cidParam) {
+            var isTopic = cidParam.startsWith('topic-');
+            var elementId = isTopic ? cidParam : 'comment-' + cidParam;
+            var element = document.getElementById(elementId);
+            if (element) {
+                scrollPositionRestored = true;
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.style.outline = '3px solid #4a90d9';
+                element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
+                setTimeout(function() {
+                    element.style.outline = '';
+                    element.style.backgroundColor = '';
+                }, 3000);
+                return;
+            }
+        }
+
+        var lastmodParam = urlParams.get('lastmod');
+        if (lastmodParam) {
+            var elementId = 'comment-' + lastmodParam;
+            var element = document.getElementById(elementId);
+            if (element) {
+                scrollPositionRestored = true;
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.style.outline = '3px solid #4a90d9';
+                element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
+                setTimeout(function() {
+                    element.style.outline = '';
+                    element.style.backgroundColor = '';
+                }, 3000);
+                return;
+            }
+        }
+
+        try {
+            var positions = getScrollPositions();
+            var currentPath = window.location.pathname;
+            var saved = positions[currentPath];
+            if (saved && saved.commentId) {
+                var now = Date.now();
+                var maxAge = 30 * 24 * 60 * 60 * 1000;
+                if (now - saved.timestamp < maxAge) {
+                    var elementId = saved.commentId;
+                    var element = document.getElementById(elementId);
+                    if (element) {
+                        scrollPositionRestored = true;
+                        var targetScroll = saved.scrollOffset ? element.getBoundingClientRect().top + window.pageYOffset + saved.scrollOffset : element.getBoundingClientRect().top + window.pageYOffset;
+                        window.scrollTo({ top: targetScroll, behavior: 'smooth' });
+                        element.style.outline = '3px solid #4a90d9';
+                        element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
+                        setTimeout(function() {
+                            element.style.outline = '';
+                            element.style.backgroundColor = '';
+                        }, 3000);
+                    }
                 }
-            });
-        });
+            }
+        } catch(e) {}
     }
-    function scrollToLastMod() {
-        const lm = new URL(location.href).searchParams.get('lastmod'); if (!lm) return;
-        const el = document.getElementById('comment-' + lm); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.style.outline = '3px solid #4a90d9'; setTimeout(() => { el.style.outline = ''; }, 3000); }
-    }
-    function updateNotificationBadge(btn) {
-        const ce = document.getElementById('main_events_count'), raw = ce ? ce.textContent : '(0)', count = parseInt(raw.replace(/[^0-9]/g, '')) || 0;
-        btn.textContent = count > 0 ? count : '🔔';
-        const settings = getSettings(), scale = getScale(settings), fs = Math.round(24 * scale);
-        btn.style.fontSize = count > 0 ? Math.round(28 * scale) + 'px' : fs + 'px'; btn.style.fontWeight = 'bold';
-    }
-    function highlightButton(id) {
-        POSITIONS.forEach(pos => { const k = id + '_' + pos; if (allButtons[k]) { allButtons[k].style.background = '#4CAF50'; setTimeout(() => { if (allButtons[k]) allButtons[k].style.background = getColor('btnBg'); }, 3000); } });
-    }
-    function flashSavedBtn(text, color) {
-        POSITIONS.forEach(pos => { const k = 'saved_' + pos; if (allButtons[k]) { const b = allButtons[k], ot = b.textContent; b.textContent = text; b.style.color = color; setTimeout(() => { b.textContent = ot; b.style.color = ''; }, 1500); } });
-    }
+
     function saveScrollPosition() {
         if (Date.now() - pageLoadTime < 2000) return;
-        const pid = getPageIdentifier(), sp = getSavedPages(), found = sp.find(p => p.url === pid);
-        if (found) { found.scrollPosition = window.pageYOffset || document.documentElement.scrollTop; found.lastChecked = new Date().toISOString(); saveSavedPages(sp); }
+        if (scrollPositionRestored && Date.now() - pageLoadTime < 5000) return;
+
+        var scrollY = window.pageYOffset || document.documentElement.scrollTop;
+        if (scrollY < 100) return;
+
+        try {
+            const articles = document.querySelectorAll('article.msg');
+            if (articles.length === 0) return;
+            let bestArticle = null;
+            let bestVisibleRatio = 0;
+            const viewportHeight = window.innerHeight;
+            const viewportCenter = viewportHeight / 2;
+            for (let i = 0; i < articles.length; i++) {
+                const rect = articles[i].getBoundingClientRect();
+                const visibleTop = Math.max(0, rect.top);
+                const visibleBottom = Math.min(viewportHeight, rect.bottom);
+                const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+                const articleHeight = rect.bottom - rect.top;
+                const visibleRatio = articleHeight > 0 ? visibleHeight / articleHeight : 0;
+                if (visibleRatio > bestVisibleRatio && visibleRatio > 0.1) {
+                    const centerDistance = Math.abs((rect.top + rect.bottom) / 2 - viewportCenter);
+                    if (!bestArticle || visibleRatio > bestVisibleRatio + 0.1 || (Math.abs(visibleRatio - bestVisibleRatio) < 0.1 && centerDistance < bestCenterDistance)) {
+                        bestArticle = articles[i];
+                        bestVisibleRatio = visibleRatio;
+                        var bestCenterDistance = centerDistance;
+                    }
+                }
+            }
+            if (bestArticle && bestArticle.id) {
+                const scrollOffset = Math.round(bestArticle.getBoundingClientRect().top);
+                const commentId = bestArticle.id;
+                const currentPath = window.location.pathname;
+                const positions = getScrollPositions();
+                const now = Date.now();
+                const maxAge = 30 * 24 * 60 * 60 * 1000;
+                const cleaned = {};
+                for (const path in positions) {
+                    if (now - positions[path].timestamp < maxAge) {
+                        cleaned[path] = positions[path];
+                    }
+                }
+                cleaned[currentPath] = {
+                    commentId: commentId,
+                    scrollOffset: scrollOffset,
+                    timestamp: now,
+                    title: document.title.replace(' - Linux.org.ru', '').trim()
+                };
+                const paths = Object.keys(cleaned);
+                if (paths.length > 50) {
+                    paths.sort(function(a, b) { return cleaned[a].timestamp - cleaned[b].timestamp; });
+                    const toDelete = paths.slice(0, paths.length - 50);
+                    for (let i = 0; i < toDelete.length; i++) {
+                        delete cleaned[toDelete[i]];
+                    }
+                }
+                saveScrollPositions(cleaned);
+            }
+        } catch(e) {}
     }
+
     function updateSavedData() {
         const pid = getPageIdentifier(), sp = getSavedPages(), idx = sp.findIndex(p => p.url === pid);
         if (idx !== -1) {
@@ -1311,11 +1151,13 @@
             else if (sessionStorage.getItem('scroll_restored_' + pid)) { const cc = getCommentCount(), cs = window.pageYOffset || document.documentElement.scrollTop; sp[idx].commentCount = cc; sp[idx].scrollPosition = cs; sp[idx].lastChecked = new Date().toISOString(); saveSavedPages(sp); }
         } else { currentPageSaved = false; }
     }
+
     function addCurrentPageToSaved() {
         const pid = getPageIdentifier(), sp = getSavedPages(), idx = sp.findIndex(p => p.url === pid), title = document.title.replace(' - Linux.org.ru', '').trim(), cc = getCommentCount(), cs = window.pageYOffset || document.documentElement.scrollTop;
         if (idx !== -1) { sp[idx].commentCount = cc; sp[idx].scrollPosition = cs; sp[idx].lastChecked = new Date().toISOString(); saveSavedPages(sp); currentPageSaved = true; flashSavedBtn('↻', '#4a90d9'); sessionStorage.removeItem('scroll_restored_' + pid); }
         else { sp.push({ url: pid, title: title, commentCount: cc, scrollPosition: cs, lastChecked: new Date().toISOString() }); saveSavedPages(sp); currentPageSaved = true; flashSavedBtn('✓', '#4CAF50'); }
     }
+
     function confirmAndAddToBlacklist() {
         const author = getProfilePageNick() || getCurrentNewsAuthor();
         if (!author) { alert('Не удалось определить автора.'); return; }
@@ -1324,15 +1166,15 @@
             if (bl.indexOf(author) === -1) { bl.push(author); saveBlacklistAndNotify(bl); alert('Автор "' + author + '" добавлен.'); } else { alert('Автор уже в списке.'); }
         }
     }
+
     function confirmAndAddToTracked() {
         const author = getProfilePageNick() || getCurrentNewsAuthor();
         if (!author) { alert('Не удалось определить автора.'); return; }
         const tr = getTrackedUsers();
         if (tr[author]) { alert('Пользователь "' + author + '" уже отслеживается.'); return; }
-        if (confirm('Добавить пользователя "' + author + '" в список отслеживаемых?')) {
-            tr[author] = { lastVisit: 'загрузка...', checked: 0 }; saveTrackedUsers(tr); alert('Пользователь "' + author + '" добавлен.');
-        }
+        if (confirm('Добавить пользователя "' + author + '" в список отслеживаемых?')) { tr[author] = { lastVisit: 'загрузка...', checked: 0 }; saveTrackedUsers(tr); alert('Пользователь "' + author + '" добавлен.'); }
     }
+
     function showExtraButtons(btn, pos) {
         const colors = getThemeColors(), settings = getSettings(), scale = settings.general.scale / 100, size = Math.round(44 * scale), fs = Math.round(22 * scale);
         if (settingsBtn) { settingsBtn.remove(); settingsBtn = null; } if (addCustomBtn) { addCustomBtn.remove(); addCustomBtn = null; }
@@ -1350,7 +1192,9 @@
         addCustomBtn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); showAddCustomModal(); hideExtraButtons(); });
         btn.appendChild(addCustomBtn);
     }
+
     function hideExtraButtons() { if (settingsBtn) { settingsBtn.style.opacity = '0'; settingsBtn.style.pointerEvents = 'none'; } if (addCustomBtn) { addCustomBtn.style.opacity = '0'; addCustomBtn.style.pointerEvents = 'none'; } }
+
     function moveButtonUp(btnId, settings) {
         const order = settings.buttonOrder || [];
         const idx = order.indexOf(btnId);
@@ -1372,7 +1216,9 @@
         window.addEventListener('scroll', sh, { passive: true });
         activeTooltip._sh = sh;
     }
+
     function hideVisitTooltip() { if (activeTooltip) { if (activeTooltip._sh) window.removeEventListener('scroll', activeTooltip._sh); activeTooltip.remove(); activeTooltip = null; } }
+
     function makeReplyNicksClickable() {
         const titles = document.querySelectorAll('article.msg div.title');
         titles.forEach(title => {
@@ -1413,19 +1259,75 @@
     }
 
     document.addEventListener('click', e => { let hide = true; if (settingsBtn && settingsBtn.contains(e.target)) hide = false; if (addCustomBtn && addCustomBtn.contains(e.target)) hide = false; if (hide) hideExtraButtons(); });
-    window.addEventListener('load', () => { pageLoadTime = Date.now(); setTimeout(scrollToLastMod, 1000); setTimeout(updateSavedData, 1500); setTimeout(makeReplyNicksClickable, 2000); });
+
+    window.addEventListener('load', () => {
+        pageLoadTime = Date.now();
+        restoreScrollPosition();
+        setTimeout(function() {
+            if (!scrollPositionRestored) {
+                restoreScrollPosition();
+            }
+        }, 500);
+        setTimeout(function() {
+            if (!scrollPositionRestored) {
+                restoreScrollPosition();
+            }
+        }, 1000);
+        setTimeout(function() {
+            if (!scrollPositionRestored) {
+                restoreScrollPosition();
+            }
+        }, 2000);
+        setTimeout(scrollToLastMod, 1000);
+        setTimeout(updateSavedData, 1500);
+        setTimeout(makeReplyNicksClickable, 2000);
+    });
+
     window.addEventListener('resize', () => { const s = getSettings(); if (s.general.mobileView) positionMobilePanels(); });
     window.addEventListener('orientationchange', () => { setTimeout(() => { const s = getSettings(); if (s.general.mobileView) positionMobilePanels(); }, 300); });
-    if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', () => { setTimeout(rebuildPanel, 500); setTimeout(updateSavedData, 800); setTimeout(makeReplyNicksClickable, 1000); }); }
-    else { setTimeout(rebuildPanel, 500); setTimeout(updateSavedData, 800); setTimeout(makeReplyNicksClickable, 1000); }
+    window.addEventListener('storage', function(e) {
+        if (e.key === 'lor_pending_scroll_target' && e.newValue) {
+            setTimeout(function() {
+                restoreScrollPosition();
+            }, 500);
+        }
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(rebuildPanel, 500);
+            setTimeout(updateSavedData, 800);
+            setTimeout(makeReplyNicksClickable, 1000);
+            setTimeout(function() {
+                if (!scrollPositionRestored) {
+                    restoreScrollPosition();
+                }
+            }, 1200);
+        });
+    }
+    else {
+        setTimeout(rebuildPanel, 500);
+        setTimeout(updateSavedData, 800);
+        setTimeout(makeReplyNicksClickable, 1000);
+        setTimeout(function() {
+            if (!scrollPositionRestored) {
+                restoreScrollPosition();
+            }
+        }, 1200);
+    }
+
     let attempts = 0; const interval = setInterval(() => { if (document.body) { clearInterval(interval); rebuildPanel(); updateSavedData(); makeReplyNicksClickable(); } if (++attempts > 20) clearInterval(interval); }, 250);
+
     const domObserver = new MutationObserver(mutations => { let hasNew = false; mutations.forEach(m => { if (m.type === 'childList' && m.addedNodes.length > 0) { for (let i = 0; i < m.addedNodes.length; i++) { const n = m.addedNodes[i]; if (n.nodeType === 1) { if (n.querySelectorAll && n.querySelectorAll('article.msg div.title').length > 0) hasNew = true; if (n.classList && (n.classList.contains('msg') || n.querySelector('.title'))) hasNew = true; } } } }); if (hasNew) setTimeout(makeReplyNicksClickable, 500); });
     domObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
+
     document.addEventListener('touchstart', e => { if (e.touches.length === 1) { touchStartY = e.touches[0].clientY; touchStartX = e.touches[0].clientX; touchMoved = false; const t = e.target; let inPanel = false; POSITIONS.forEach(pos => { if (mobileCollapsedContainers[pos] && mobileCollapsedContainers[pos].contains(t)) inPanel = true; if (mobileExpandedContainers[pos] && mobileExpandedContainers[pos].contains(t)) inPanel = true; }); e.target._tip = inPanel; } }, { passive: true });
     document.addEventListener('touchmove', e => { if (e.touches.length === 1) { const dy = e.touches[0].clientY - touchStartY, dx = e.touches[0].clientX - touchStartX; if (Math.abs(dy) > 10 || Math.abs(dx) > 10) touchMoved = true; if (e.target._tip && Math.abs(dy) > Math.abs(dx)) e.preventDefault(); } }, { passive: false });
     document.addEventListener('touchend', e => { if (!touchMoved) return; const s = getSettings(); if (!s.general.mobileView) { touchMoved = false; return; } const dy = (e.changedTouches[0] ? e.changedTouches[0].clientY : touchStartY) - touchStartY, t = e.target; POSITIONS.forEach(pos => { let inPanel = false; if (mobileCollapsedContainers[pos] && mobileCollapsedContainers[pos].contains(t)) inPanel = true; if (mobileExpandedContainers[pos] && mobileExpandedContainers[pos].contains(t)) inPanel = true; if (inPanel) { if (dy > SWIPE_THRESHOLD) expandMobilePanel(pos); else if (dy < -SWIPE_THRESHOLD) collapseMobilePanel(pos); } }); touchMoved = false; });
+
     function expandMobilePanel(pos) { if (isMobilePanelExpanded[pos]) return; isMobilePanelExpanded[pos] = true; if (mobileCollapsedContainers[pos]) mobileCollapsedContainers[pos].style.display = 'none'; if (mobileExpandedContainers[pos]) { mobileExpandedContainers[pos].style.display = 'flex'; mobileExpandedContainers[pos].scrollTop = 0; mobileExpandedContainers[pos].scrollLeft = 0; } }
     function collapseMobilePanel(pos) { if (!isMobilePanelExpanded[pos]) return; isMobilePanelExpanded[pos] = false; if (mobileExpandedContainers[pos]) mobileExpandedContainers[pos].style.display = 'none'; if (mobileCollapsedContainers[pos]) mobileCollapsedContainers[pos].style.display = 'flex'; }
+
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             const overlays = document.querySelectorAll('.lor-panel-modal-overlay');
@@ -1436,4 +1338,27 @@
             }
         }
     });
+
+    document.addEventListener('click', function(e) {
+        var link = e.target.closest('a');
+        if (!link) return;
+        var href = link.href;
+        if (!href) return;
+        var match = href.match(/[?&]cid=(\d+)/);
+        if (!match) {
+            match = href.match(/[?&]lastmod=(\d+)/);
+        }
+        if (!match) return;
+        var commentId = match[1];
+        var linkUrl = new URL(href);
+        var topicPath = linkUrl.pathname;
+        var pending = {
+            topicPath: topicPath,
+            commentId: commentId,
+            timestamp: Date.now()
+        };
+        try {
+            localStorage.setItem('lor_pending_scroll_target', JSON.stringify(pending));
+        } catch(e) {}
+    }, true);
 })();
