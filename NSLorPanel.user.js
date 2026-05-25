@@ -1018,6 +1018,7 @@
                 var currentPath = window.location.pathname;
                 if (pending.topicPath === currentPath && pending.commentId) {
                     localStorage.removeItem('lor_pending_scroll_target');
+
                     var isTopic = pending.commentId.startsWith('topic-');
                     var elementId = isTopic ? pending.commentId : 'comment-' + pending.commentId;
                     var element = document.getElementById(elementId);
@@ -1030,6 +1031,8 @@
                             element.style.outline = '';
                             element.style.backgroundColor = '';
                         }, 3000);
+
+                        updateSavedPositionForCurrentUrl(pending.commentId);
                         return;
                     }
                 } else {
@@ -1040,26 +1043,12 @@
 
         var urlParams = new URLSearchParams(window.location.search);
         var cidParam = urlParams.get('cid');
-        if (cidParam) {
-            var isTopic = cidParam.startsWith('topic-');
-            var elementId = isTopic ? cidParam : 'comment-' + cidParam;
-            var element = document.getElementById(elementId);
-            if (element) {
-                scrollPositionRestored = true;
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                element.style.outline = '3px solid #4a90d9';
-                element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
-                setTimeout(function() {
-                    element.style.outline = '';
-                    element.style.backgroundColor = '';
-                }, 3000);
-                return;
-            }
-        }
-
         var lastmodParam = urlParams.get('lastmod');
-        if (lastmodParam) {
-            var elementId = 'comment-' + lastmodParam;
+        var targetId = cidParam || lastmodParam;
+
+        if (targetId) {
+            var isTopic = targetId.startsWith('topic-');
+            var elementId = isTopic ? targetId : 'comment-' + targetId;
             var element = document.getElementById(elementId);
             if (element) {
                 scrollPositionRestored = true;
@@ -1070,6 +1059,8 @@
                     element.style.outline = '';
                     element.style.backgroundColor = '';
                 }, 3000);
+
+                updateSavedPositionForCurrentUrl(targetId);
                 return;
             }
         }
@@ -1097,6 +1088,30 @@
                     }
                 }
             }
+        } catch(e) {}
+    }
+
+    function updateSavedPositionForCurrentUrl(commentId) {
+        try {
+            var currentPath = window.location.pathname;
+            var positions = getScrollPositions();
+            var now = Date.now();
+            var maxAge = 30 * 24 * 60 * 60 * 1000;
+
+            var cleaned = {};
+            for (var path in positions) {
+                if (now - positions[path].timestamp < maxAge) {
+                    cleaned[path] = positions[path];
+                }
+            }
+            cleaned[currentPath] = {
+                commentId: commentId,
+                scrollOffset: 0,
+                timestamp: now,
+                title: document.title.replace(' - Linux.org.ru', '').trim()
+            };
+
+            saveScrollPositions(cleaned);
         } catch(e) {}
     }
 
@@ -1363,14 +1378,21 @@
         if (!link) return;
         var href = link.href;
         if (!href) return;
+
+        // Проверяем только ссылки на ЛОР
+        if (!href.includes('linux.org.ru')) return;
+
         var match = href.match(/[?&]cid=(\d+)/);
         if (!match) {
             match = href.match(/[?&]lastmod=(\d+)/);
         }
         if (!match) return;
+
         var commentId = match[1];
         var linkUrl = new URL(href);
         var topicPath = linkUrl.pathname;
+
+        // Сохраняем целевой комментарий
         var pending = {
             topicPath: topicPath,
             commentId: commentId,
@@ -1378,6 +1400,18 @@
         };
         try {
             localStorage.setItem('lor_pending_scroll_target', JSON.stringify(pending));
+        } catch(e) {}
+
+        // ТАКЖЕ обновляем сохранённую позицию ДО перехода
+        try {
+            var positions = getScrollPositions();
+            positions[topicPath] = {
+                commentId: commentId.startsWith('topic-') ? commentId : 'comment-' + commentId,
+                scrollOffset: 0,
+                timestamp: Date.now(),
+                title: ''
+            };
+            saveScrollPositions(positions);
         } catch(e) {}
     }, true);
 
