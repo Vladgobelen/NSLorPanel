@@ -1574,4 +1574,195 @@
     }
 
     setTimeout(addTableSorting, 500);
+
+    // === ПРЕВЬЮ КОММЕНТАРИЕВ ПО ДОЛГОМУ КЛИКУ ===
+    function initCommentPreview() {
+        const settings = getSettings();
+        const modalScale = settings.general.modalScale / 100;
+        const isDark = isDarkTheme();
+
+        if (!document.getElementById('lor-preview-styles')) {
+            const style = document.createElement('style');
+            style.id = 'lor-preview-styles';
+            style.textContent = `
+                .lor-comment-preview {
+                    position: fixed;
+                    z-index: 100001;
+                    background: ${isDark ? '#0a0a14' : '#ffffff'};
+                    color: ${isDark ? '#ccc' : '#333'};
+                    border: 1px solid ${isDark ? '#333' : '#ccc'};
+                    border-radius: ${Math.round(8 * modalScale)}px;
+                    padding: ${Math.round(16 * modalScale)}px;
+                    max-width: ${Math.round(600 * modalScale)}px;
+                    max-height: ${Math.round(400 * modalScale)}px;
+                    overflow-y: auto;
+                    font-family: Arial, sans-serif;
+                    font-size: ${Math.round(14 * modalScale)}px;
+                    box-shadow: 0 ${Math.round(4 * modalScale)}px ${Math.round(20 * modalScale)}px rgba(0,0,0,${isDark ? '0.8' : '0.2'});
+                }
+                .lor-comment-preview .preview-header {
+                    color: #4a90d9;
+                    font-weight: bold;
+                    margin-bottom: ${Math.round(8 * modalScale)}px;
+                    padding-bottom: ${Math.round(8 * modalScale)}px;
+                    border-bottom: 1px solid ${isDark ? '#333' : '#ccc'};
+                    font-size: ${Math.round(15 * modalScale)}px;
+                }
+                .lor-comment-preview .preview-body {
+                    line-height: 1.6;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                }
+                .lor-comment-preview .preview-body img { max-width: 100%; height: auto; }
+                .lor-comment-preview .preview-body pre,
+                .lor-comment-preview .preview-body code {
+                    max-width: 100%; overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+                }
+                .lor-comment-preview .preview-loading {
+                    text-align: center; padding: ${Math.round(20 * modalScale)}px;
+                    color: ${isDark ? '#666' : '#999'};
+                }
+                .lor-comment-preview .preview-body blockquote {
+                    border-left: 3px solid ${isDark ? '#333' : '#ddd'};
+                    margin: ${Math.round(8 * modalScale)}px 0;
+                    padding: ${Math.round(4 * modalScale)}px ${Math.round(12 * modalScale)}px;
+                    color: ${isDark ? '#aaa' : '#666'};
+                }
+                .lor-comment-preview .preview-body a { color: #4a90d9; pointer-events: none; text-decoration: none; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        function removePreview() {
+            const old = document.querySelector('.lor-comment-preview');
+            if (old) old.remove();
+        }
+
+        function showPreview(commentUrl, x, y) {
+            removePreview();
+
+            const preview = document.createElement('div');
+            preview.className = 'lor-comment-preview';
+            preview.innerHTML = '<div class="preview-loading">Загрузка...</div>';
+            preview.style.left = Math.min(x, window.innerWidth - Math.round(620 * modalScale)) + 'px';
+            preview.style.top = Math.min(y, window.innerHeight - Math.round(420 * modalScale)) + 'px';
+            document.body.appendChild(preview);
+
+            const cid = new URL(commentUrl).searchParams.get('cid');
+
+            fetch(commentUrl)
+                .then(r => r.text())
+                .then(html => {
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    let commentEl = doc.getElementById('comment-' + cid) || doc.getElementById(cid);
+
+                    if (!commentEl) {
+                        doc.querySelectorAll('article.msg').forEach(a => {
+                            if (a.id === 'comment-' + cid || a.id === cid) commentEl = a;
+                        });
+                    }
+
+                    if (commentEl) {
+                        const author = commentEl.querySelector('a[href*="/people/"]')?.textContent.trim() || 'Аноним';
+                        const bodyEl = commentEl.querySelector('.msg_body');
+
+                        // Клонируем bodyEl чтобы не трогать оригинал
+                        const clone = bodyEl ? bodyEl.cloneNode(true) : commentEl.cloneNode(true);
+
+                        // Удаляем ненужные элементы из клона
+                        clone.querySelectorAll('.reply').forEach(el => el.remove());
+                        clone.querySelectorAll('.btn-group').forEach(el => el.remove());
+
+                        // Убираем onclick у ссылок
+                        let body = clone.innerHTML;
+                        body = body.replace(/<a\s+[^>]*onclick="[^"]*"[^>]*>/gi, '<a>');
+
+                        // Убираем ссылки действий (на случай если остались)
+                        body = body.replace(/<a[^>]*>\s*(?:Ответить|Реакции|Уведомить\s+модераторов|Ссылка|Править|Удалить|Восстановить|Отклонить|Показать\s+ответы?)\s*<\/a>/gi, '');
+
+                        // Убираем пустые <li>
+                        body = body.replace(/<li>\s*<\/li>/gi, '');
+
+                        // Убираем разделители и параграфы
+                        body = body.replace(/\s*\|\s*/g, ' ');
+                        body = body.replace(/<span[^>]*class="[^"]*paragraph[^"]*"[^>]*>.*?<\/span>/gi, '');
+                        body = body.replace(/¶/g, '');
+                        body = body.trim();
+
+                        const isDeleted = body.includes('Сообщение удалено') || body.includes('комментарий удален');
+
+                        preview.innerHTML = `
+                            <div class="preview-header">💬 ${author}</div>
+                            <div class="preview-body">${isDeleted ? '<em style="color:#666">Сообщение удалено</em>' : body}</div>
+                        `;
+                    } else {
+                        preview.innerHTML = '<div class="preview-loading">Комментарий не найден</div>';
+                    }
+                })
+                .catch(() => {
+                    preview.innerHTML = '<div class="preview-loading">Ошибка загрузки</div>';
+                });
+        }
+
+        document.querySelectorAll('article.msg div.title').forEach(title => {
+            if (!title.textContent.includes('Ответ на:')) return;
+
+            title.querySelectorAll('a[href*="?cid="]').forEach(link => {
+                if (link.dataset.lorPrev) return;
+                link.dataset.lorPrev = '1';
+
+                let timer = null, blocked = false, sx = 0, sy = 0;
+
+                link.addEventListener('click', function(e) {
+                    if (blocked) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        blocked = false;
+                        return false;
+                    }
+                }, true);
+
+                link.addEventListener('mousedown', function(e) {
+                    if (e.button !== 0) return;
+                    blocked = false;
+                    sx = e.clientX;
+                    sy = e.clientY;
+                    timer = setTimeout(() => {
+                        blocked = true;
+                        showPreview(link.href, sx, sy);
+                    }, 500);
+                });
+
+                link.addEventListener('mousemove', function(e) {
+                    if (timer && (Math.abs(e.clientX - sx) > 5 || Math.abs(e.clientY - sy) > 5)) {
+                        clearTimeout(timer);
+                        timer = null;
+                    }
+                });
+
+                link.addEventListener('mouseup', function() {
+                    if (blocked) setTimeout(() => { blocked = false; }, 100);
+                    clearTimeout(timer);
+                    timer = null;
+                });
+            });
+        });
+
+        document.addEventListener('mousedown', function(e) {
+            const preview = document.querySelector('.lor-comment-preview');
+            if (preview && !preview.contains(e.target)) removePreview();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') removePreview();
+        });
+    }
+
+    setTimeout(initCommentPreview, 800);
+
+    const previewObserver = new MutationObserver(() => {
+        setTimeout(initCommentPreview, 300);
+    });
+    previewObserver.observe(document.body, { childList: true, subtree: true });
 })();
