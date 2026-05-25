@@ -814,6 +814,7 @@
             const list = document.createElement('div'); list.style.cssText = `display:flex;flex-direction:column;gap:${Math.round(8 * modalScale)}px;`;
             sp.forEach((page, idx) => {
                 const row = createListRow(modalScale, isDark);
+                row.setAttribute('data-notif-url', nf.url);
                 const info = document.createElement('div'); info.style.cssText = 'flex:1;';
                 const td = document.createElement('div'); td.textContent = page.title; td.style.cssText = `font-weight:bold;margin-bottom:${Math.round(4 * modalScale)}px;`; info.appendChild(td);
                 const ud = document.createElement('div'); ud.textContent = page.url; ud.style.cssText = `font-size:${Math.round(11 * modalScale)}px;color:${isDark ? '#666' : '#999'};word-break:break-all;`; info.appendChild(ud);
@@ -910,7 +911,10 @@
             if (notifs.length === 0) { content.textContent = 'Нет уведомлений'; content.style.textAlign = 'center'; return; }
             const list = document.createElement('div'); list.style.cssText = `display:flex;flex-direction:column;gap:${Math.round(8 * modalScale)}px;`;
             notifs.forEach(nf => {
-                const row = createListRow(modalScale, isDark), info = document.createElement('div'); info.style.cssText = 'flex:1;';
+                const row = createListRow(modalScale, isDark);
+                // Добавляем атрибут data-notif-url для предпросмотра по долгому нажатию
+                row.setAttribute('data-notif-url', nf.url);
+                const info = document.createElement('div'); info.style.cssText = 'flex:1;';
                 if (nf.category) { const cd = document.createElement('div'); cd.textContent = nf.category; cd.style.cssText = `font-size:${Math.round(11 * modalScale)}px;color:#4a90d9;margin-bottom:${Math.round(4 * modalScale)}px;`; info.appendChild(cd); }
                 const td = document.createElement('div'); td.textContent = nf.title; td.style.cssText = 'font-weight:bold;'; info.appendChild(td);
                 if (nf.tags.length > 0) { const tg = document.createElement('div'); tg.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:' + Math.round(4 * modalScale) + 'px;'; nf.tags.forEach(t => { const ts = document.createElement('span'); ts.textContent = t; ts.style.cssText = `font-size:${Math.round(10 * modalScale)}px;padding:2px 6px;background:${isDark ? '#1a1a2e' : '#f0f0f0'};border-radius:3px;`; tg.appendChild(ts); }); info.appendChild(tg); }
@@ -1379,7 +1383,6 @@
         var href = link.href;
         if (!href) return;
 
-        // Проверяем только ссылки на ЛОР
         if (!href.includes('linux.org.ru')) return;
 
         var match = href.match(/[?&]cid=(\d+)/);
@@ -1402,7 +1405,6 @@
             localStorage.setItem('lor_pending_scroll_target', JSON.stringify(pending));
         } catch(e) {}
 
-        // ТАКЖЕ обновляем сохранённую позицию ДО перехода
         try {
             var positions = getScrollPositions();
             positions[topicPath] = {
@@ -1444,11 +1446,9 @@
                     const raw = tbl.rows[i].cells[col]?.textContent.trim() || '';
                     if (raw === '' || raw === '-' || raw === '—') continue;
                     total++;
-                    // Проверяем на относительное время: "X минут/часов/дней назад", "минуту назад"
                     if (/(?:минут|час|день|дня|дней|недел|месяц|год|минуту|час назад|сегодня|вчера)/i.test(raw)) {
                         hasTime = true;
                     }
-                    // Проверяем на число
                     if (!/^[+-]?\d+$/.test(raw.replace(/[\s\u00A0]/g, ''))) {
                         hasNumeric = false;
                     }
@@ -1462,22 +1462,17 @@
                 const now = Date.now();
                 const val = str.toLowerCase();
 
-                // "минуту назад"
                 if (val.includes('минуту назад')) return now - 60 * 1000;
 
-                // "X минут/минуты назад"
                 let m = val.match(/(\d+)\s*минут/);
                 if (m) return now - parseInt(m[1]) * 60 * 1000;
 
-                // "X час/часа/часов назад"
                 m = val.match(/(\d+)\s*час/);
                 if (m) return now - parseInt(m[1]) * 3600 * 1000;
 
-                // "X день/дня/дней назад"
                 m = val.match(/(\d+)\s*д(?:ень|ня|ней)/);
                 if (m) return now - parseInt(m[1]) * 86400 * 1000;
 
-                // "сегодня ЧЧ:ММ"
                 m = val.match(/сегодня\s+(\d{1,2}):(\d{2})/);
                 if (m) {
                     const d = new Date();
@@ -1485,7 +1480,6 @@
                     return d.getTime();
                 }
 
-                // "вчера ЧЧ:ММ"
                 m = val.match(/вчера\s+(\d{1,2}):(\d{2})/);
                 if (m) {
                     const d = new Date();
@@ -1494,7 +1488,6 @@
                     return d.getTime();
                 }
 
-                // Дата в формате ДД.ММ.ГГГГ или ДД.ММ.ГГ
                 m = val.match(/(\d{2})\.(\d{2})\.(\d{2,4})/);
                 if (m) {
                     const year = m[3].length === 2 ? 2000 + parseInt(m[3]) : parseInt(m[3]);
@@ -1521,7 +1514,6 @@
                     const aVal = getSortValue(col, a);
                     const bVal = getSortValue(col, b);
 
-                    // Пустые в конец
                     if (aVal.empty && bVal.empty) return 0;
                     if (aVal.empty) return 1;
                     if (bVal.empty) return -1;
@@ -1533,7 +1525,7 @@
                     } else if (colType === 'time') {
                         const aTime = parseRelativeTime(aVal.raw);
                         const bTime = parseRelativeTime(bVal.raw);
-                        return direction === 'asc' ? bTime - aTime : aTime - bTime; // Новые сверху при asc
+                        return direction === 'asc' ? bTime - aTime : aTime - bTime;
                     } else {
                         const cmp = aVal.raw.toLowerCase().localeCompare(bVal.raw.toLowerCase(), 'ru');
                         return direction === 'asc' ? cmp : -cmp;
@@ -1700,24 +1692,18 @@
                         const author = commentEl.querySelector('a[href*="/people/"]')?.textContent.trim() || 'Аноним';
                         const bodyEl = commentEl.querySelector('.msg_body');
 
-                        // Клонируем bodyEl чтобы не трогать оригинал
                         const clone = bodyEl ? bodyEl.cloneNode(true) : commentEl.cloneNode(true);
 
-                        // Удаляем ненужные элементы из клона
                         clone.querySelectorAll('.reply').forEach(el => el.remove());
                         clone.querySelectorAll('.btn-group').forEach(el => el.remove());
 
-                        // Убираем onclick у ссылок
                         let body = clone.innerHTML;
                         body = body.replace(/<a\s+[^>]*onclick="[^"]*"[^>]*>/gi, '<a>');
 
-                        // Убираем ссылки действий (на случай если остались)
                         body = body.replace(/<a[^>]*>\s*(?:Ответить|Реакции|Уведомить\s+модераторов|Ссылка|Править|Удалить|Восстановить|Отклонить|Показать\s+ответы?)\s*<\/a>/gi, '');
 
-                        // Убираем пустые <li>
                         body = body.replace(/<li>\s*<\/li>/gi, '');
 
-                        // Убираем разделители и параграфы
                         body = body.replace(/\s*\|\s*/g, ' ');
                         body = body.replace(/<span[^>]*class="[^"]*paragraph[^"]*"[^>]*>.*?<\/span>/gi, '');
                         body = body.replace(/¶/g, '');
@@ -1799,4 +1785,123 @@
         setTimeout(initCommentPreview, 300);
     });
     previewObserver.observe(document.body, { childList: true, subtree: true });
+
+    // === ПРЕВЬЮ УВЕДОМЛЕНИЙ ПО ДОЛГОМУ КЛИКУ ===
+    function initNotificationPreview() {
+        const settings = getSettings();
+        const modalScale = settings.general.modalScale / 100;
+        const isDark = isDarkTheme();
+
+        function showPreview(notificationUrl, x, y, notificationRow) {
+            const old = document.querySelector('.lor-comment-preview');
+            if (old) old.remove();
+
+            const preview = document.createElement('div');
+            preview.className = 'lor-comment-preview';
+            preview.innerHTML = `<div style="text-align:center;padding:${Math.round(20 * modalScale)}px;color:${isDark ? '#666' : '#999'};">Загрузка...</div>`;
+            preview.style.cssText = `position:fixed;z-index:100002;background:${isDark?'#0a0a14':'#fff'};color:${isDark?'#ccc':'#333'};border:1px solid ${isDark?'#333':'#ccc'};border-radius:${Math.round(8*modalScale)}px;padding:${Math.round(16*modalScale)}px;max-width:${Math.round(600*modalScale)}px;max-height:${Math.round(400*modalScale)}px;overflow-y:auto;font-family:Arial,sans-serif;font-size:${Math.round(14*modalScale)}px;box-shadow:0 ${Math.round(4*modalScale)}px ${Math.round(20*modalScale)}px rgba(0,0,0,${isDark?0.8:0.2});left:${Math.min(x,window.innerWidth-Math.round(620*modalScale))}px;top:${Math.min(y,window.innerHeight-Math.round(420*modalScale))}px;`;
+            document.body.appendChild(preview);
+
+            fetch(notificationUrl).then(r => r.text().then(html => ({html, finalUrl: r.url}))).then(({html, finalUrl}) => {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const originalUrl = new URL(notificationUrl);
+                let targetId = originalUrl.searchParams.get('cid');
+                if (!targetId) {
+                    const hashMatch = finalUrl.match(/#comment-(\d+)/);
+                    if (hashMatch) targetId = hashMatch[1];
+                }
+                if (!targetId) targetId = new URL(finalUrl).searchParams.get('lastmod');
+
+                let commentEl = null;
+                if (targetId) {
+                    const ids = ['comment-'+targetId, targetId, 'topic-'+targetId];
+                    for (const id of ids) { commentEl = doc.getElementById(id); if (commentEl) break; }
+                    if (!commentEl) doc.querySelectorAll('article.msg').forEach(a => { if (ids.includes(a.id)) commentEl = a; });
+                }
+
+                if (commentEl) {
+                    const author = commentEl.querySelector('a[href*="/people/"]')?.textContent.trim() || 'Аноним';
+                    const bodyEl = commentEl.querySelector('.msg_body');
+                    const clone = bodyEl ? bodyEl.cloneNode(true) : commentEl.cloneNode(true);
+                    clone.querySelectorAll('.reply,.btn-group,script,style').forEach(el => el.remove());
+                    let body = clone.innerHTML;
+                    body = body.replace(/<a\s+[^>]*onclick="[^"]*"[^>]*>/gi, '<a>');
+                    body = body.replace(/<a[^>]*>\s*(?:Ответить|Реакции|Уведомить\s+модераторов|Ссылка|Править|Удалить|Восстановить|Отклонить|Показать\s+ответы?)\s*<\/a>/gi, '');
+                    body = body.replace(/<li>\s*<\/li>/gi,'').replace(/\s*\|\s*/g,' ').replace(/<span[^>]*class="[^"]*paragraph[^"]*"[^>]*>.*?<\/span>/gi,'').replace(/¶/g,'').trim();
+                    const isDeleted = body.includes('Сообщение удалено') || body.includes('комментарий удален');
+                    preview.innerHTML = `<div style="color:#4a90d9;font-weight:bold;margin-bottom:${Math.round(8*modalScale)}px;padding-bottom:${Math.round(8*modalScale)}px;border-bottom:1px solid ${isDark?'#333':'#ccc'};font-size:${Math.round(15*modalScale)}px;">💬 ${author}</div><div style="line-height:1.6;">${isDeleted?'<em style="color:#666">Сообщение удалено</em>':body}</div>`;
+                    if (notificationRow) { notificationRow.style.opacity = '0.5'; notificationRow.style.transition = 'opacity 0.3s'; }
+                } else {
+                    preview.innerHTML = `<div style="text-align:center;padding:${Math.round(20*modalScale)}px;color:${isDark?'#666':'#999'};">Комментарий не найден</div>`;
+                }
+            }).catch(() => {
+                preview.innerHTML = `<div style="text-align:center;padding:${Math.round(20*modalScale)}px;color:${isDark?'#666':'#999'};">Ошибка загрузки</div>`;
+            });
+        }
+
+        function removePreview() {
+            const p = document.querySelector('.lor-comment-preview');
+            if (p) p.remove();
+        }
+
+        let timer = null, blocked = false, sx = 0, sy = 0, currentRow = null;
+
+        document.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return;
+
+            const modalRow = e.target.closest('[data-notif-url]');
+            const pageLink = e.target.closest('table.message-table a[href*="cid="], table.message-table a[href*="lastmod="]');
+
+            if (!modalRow && !pageLink) return;
+
+            blocked = false;
+            sx = e.clientX;
+            sy = e.clientY;
+            currentRow = modalRow || pageLink.closest('tr');
+
+            timer = setTimeout(() => {
+                blocked = true;
+                const url = modalRow ? modalRow.getAttribute('data-notif-url') : pageLink.href;
+                showPreview(url, sx, sy, currentRow);
+            }, 500);
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (timer && (Math.abs(e.clientX - sx) > 5 || Math.abs(e.clientY - sy) > 5)) {
+                clearTimeout(timer);
+                timer = null;
+            }
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (blocked) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                setTimeout(() => { blocked = false; }, 100);
+            }
+            clearTimeout(timer);
+            timer = null;
+        });
+
+        document.addEventListener('click', function(e) {
+            if (blocked) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                blocked = false;
+            }
+        }, true);
+
+        document.addEventListener('mousedown', function(e) {
+            const preview = document.querySelector('.lor-comment-preview');
+            if (preview && !preview.contains(e.target)) removePreview();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') removePreview();
+        });
+    }
+
+    initNotificationPreview();
 })();
