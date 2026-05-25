@@ -11,7 +11,7 @@
 
     const THEME_COLORS = {
         black: { btnBg: '#1a1a2e', btnBgHover: '#16213e', btnColor: '#c8c8c8', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#444444' },
-        tango: { isDark: true, txt: '#aaa', bg: '#333', border: '#666', btn: '#333', btnH: '#16213e', sep: '#666', panelBg: '#222' },
+        tango: { btnBg: '#2e3436', btnBgHover: '#3e4547', btnColor: '#babdb6', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#555753' },
         'tango-light': { btnBg: '#d3d7cf', btnBgHover: '#c0c4bc', btnColor: '#2e3436', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#888a85' },
         'tango-auto': { btnBg: '#d3d7cf', btnBgHover: '#c0c4bc', btnColor: '#2e3436', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#888a85' },
         white2: { btnBg: '#e8e8e8', btnBgHover: '#d0d0d0', btnColor: '#333333', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#cccccc' },
@@ -97,7 +97,7 @@
 
     function getDefaultSettings() {
         return {
-            general: { showBorder: false, scale: 100, modalScale: 100, mobileView: false, mobileScale: 120, orientation: 'vertical', smoothScroll: true },
+            general: { showBorder: false, scale: 100, modalScale: 100, mobileView: false, mobileScale: 120, orientation: 'vertical' },
             filter: { enabled: true, mode: 'cut', applyToMini: true, animateBlur: true, deletedMode: 'hide' },
             buttons: {
                 profile: { right: true, left: false, top: false, bottom: false },
@@ -226,6 +226,30 @@
         btn.addEventListener('contextmenu', function(e) { btn._cmjf = true; setTimeout(() => btn._cmjf = false, 300); });
         btn.addEventListener('click', function(e) { if (btn._cmjf || btn._lptr) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); return false; } if (cb) cb(e); }, true);
         return btn;
+    }
+
+    function createModal(title, width, content, zindex, id, onclose) {
+        const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
+        const overlay = document.createElement('div');
+        overlay.id = id || '';
+        overlay.className = 'lor-panel-modal-overlay';
+        overlay.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:${zindex || 100000};display:flex;align-items:center;justify-content:center;`;
+        const modal = document.createElement('div');
+        modal.style.cssText = `background:${isDark ? '#0a0a14' : '#fff'};border:1px solid ${isDark ? '#333' : '#ccc'};padding:${Math.round(24 * modalScale)}px;border-radius:${Math.round(8 * modalScale)}px;width:${Math.round((width || 600) * modalScale)}px;max-height:80vh;color:${isDark ? '#ccc' : '#333'};font-family:Arial,sans-serif;font-size:${Math.round(14 * modalScale)}px;box-shadow:0 0 30px rgba(0,0,0,${isDark ? '0.8' : '0.2'});display:flex;flex-direction:column;`;
+        const header = document.createElement('div');
+        header.style.cssText = `display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid ${isDark ? '#333' : '#ccc'};`;
+        const titleEl = document.createElement('div'); titleEl.textContent = title; titleEl.style.cssText = `font-size:${Math.round(16 * modalScale)}px;font-weight:bold;`;
+        header.appendChild(titleEl);
+        const closeBtn = document.createElement('div'); closeBtn.textContent = '✕'; closeBtn.style.cssText = `cursor:pointer;font-size:${Math.round(18 * modalScale)}px;color:${isDark ? '#888' : '#666'};`;
+        const contentDiv = document.createElement('div'); contentDiv.style.cssText = 'overflow-y:auto;flex:1;min-height:200px;';
+        if (typeof content === 'string') contentDiv.innerHTML = content; else contentDiv.appendChild(content);
+        const closeFn = function() { overlay.remove(); if (onclose) onclose(); };
+        closeBtn.onclick = closeFn;
+        header.appendChild(closeBtn); modal.appendChild(header);
+        modal.appendChild(contentDiv); overlay.appendChild(modal); document.body.appendChild(overlay);
+        overlay.onclick = function(e) { if (e.target === overlay) closeFn(); };
+        overlay._closeLorModal = closeFn;
+        return { overlay, modal, content: contentDiv, close: closeFn };
     }
 
     function createListRow(modalScale, isDark) {
@@ -522,39 +546,6 @@
         createModal('❓ Справка', 600, content, 100010, 'lor-help-overlay');
     }
 
-    function createModal(title, width, content, zindex, id, onclose) {
-        const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
-        const overlay = document.createElement('div');
-        overlay.id = id || '';
-        overlay.className = 'lor-panel-modal-overlay';
-        overlay.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:${zindex || 100000};display:flex;align-items:center;justify-content:center;padding:10px;box-sizing:border-box;`;
-        const modal = document.createElement('div');
-        modal.style.cssText = `background:${isDark ? '#0a0a14' : '#fff'};border:1px solid ${isDark ? '#333' : '#ccc'};padding:${Math.round(24 * modalScale)}px;border-radius:${Math.round(8 * modalScale)}px;width:100%;max-width:${Math.round((width || 600) * modalScale)}px;max-height:85vh;box-sizing:border-box;color:${isDark ? '#ccc' : '#333'};font-family:Arial,sans-serif;font-size:${Math.round(14 * modalScale)}px;box-shadow:0 0 30px rgba(0,0,0,${isDark ? '0.8' : '0.2'});display:flex;flex-direction:column;overflow:hidden;`;
-        const header = document.createElement('div');
-        header.style.cssText = `display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid ${isDark ? '#333' : '#ccc'};flex-shrink:0;`;
-        const titleEl = document.createElement('div');
-        titleEl.textContent = title;
-        titleEl.style.cssText = `font-size:${Math.round(16 * modalScale)}px;font-weight:bold;word-break:break-word;flex:1;`;
-        header.appendChild(titleEl);
-        const closeBtn = document.createElement('div');
-        closeBtn.textContent = '✕';
-        closeBtn.style.cssText = `cursor:pointer;font-size:${Math.round(20 * modalScale)}px;color:${isDark ? '#888' : '#666'};flex-shrink:0;margin-left:12px;padding:0 4px;`;
-        const contentDiv = document.createElement('div');
-        contentDiv.style.cssText = 'overflow-y:auto;flex:1;min-height:0;padding-right:4px;';
-        if (typeof content === 'string') contentDiv.innerHTML = content;
-        else contentDiv.appendChild(content);
-        const closeFn = function() { overlay.remove(); if (onclose) onclose(); };
-        closeBtn.onclick = closeFn;
-        header.appendChild(closeBtn);
-        modal.appendChild(header);
-        modal.appendChild(contentDiv);
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-        overlay.onclick = function(e) { if (e.target === overlay) closeFn(); };
-        overlay._closeLorModal = closeFn;
-        return { overlay, modal, content: contentDiv, close: closeFn };
-    }
-
     function showSettingsModal() {
         if (document.getElementById('lor-settings-overlay')) return;
         var settings = getSettings();
@@ -563,47 +554,57 @@
         var overlay = document.createElement('div');
         overlay.id = 'lor-settings-overlay';
         overlay.className = 'lor-panel-modal-overlay';
-        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:' + (isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)') + ';z-index:100000;display:flex;align-items:center;justify-content:center;padding:10px;box-sizing:border-box;';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:' + (isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.3)') + ';z-index:100000;display:flex;align-items:center;justify-content:center;';
         var modal = document.createElement('div');
-        modal.style.cssText = 'background:' + (isDark ? '#0a0a14' : '#ffffff') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';padding:' + Math.round(24 * modalScale) + 'px;border-radius:' + Math.round(8 * modalScale) + 'px;width:100%;max-width:' + Math.round(600 * modalScale) + 'px;max-height:85vh;box-sizing:border-box;color:' + (isDark ? '#ccc' : '#333') + ';font-family:Arial,sans-serif;font-size:' + Math.round(14 * modalScale) + 'px;box-shadow:0 0 30px rgba(0,0,0,' + (isDark ? '0.8' : '0.2') + ');display:flex;flex-direction:column;overflow:hidden;';
+        modal.style.cssText = 'background:' + (isDark ? '#0a0a14' : '#ffffff') + ';border:1px solid ' + (isDark ? '#333' : '#ccc') + ';padding:' + Math.round(24 * modalScale) + 'px;border-radius:' + Math.round(8 * modalScale) + 'px;width:' + Math.round(600 * modalScale) + 'px;color:' + (isDark ? '#ccc' : '#333') + ';font-family:Arial,sans-serif;font-size:' + Math.round(14 * modalScale) + 'px;box-shadow:0 0 30px rgba(0,0,0,' + (isDark ? '0.8' : '0.2') + ');max-height:90vh;display:flex;flex-direction:column;';
         var title = document.createElement('div');
-        title.style.cssText = 'font-size:' + Math.round(18 * modalScale) + 'px;font-weight:bold;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';flex-shrink:0;';
+        title.style.cssText = 'font-size:' + Math.round(18 * modalScale) + 'px;font-weight:bold;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';';
         title.textContent = 'Настройки панели';
         modal.appendChild(title);
         var tabs = document.createElement('div');
-        tabs.style.cssText = 'display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';flex-wrap:wrap;flex-shrink:0;';
+        tabs.style.cssText = 'display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';flex-wrap:wrap;';
         var tabGeneral = document.createElement('div');
-        tabGeneral.id = 'lor-settings-tab-general'; tabGeneral.textContent = 'Общие';
+        tabGeneral.id = 'lor-settings-tab-general';
+        tabGeneral.textContent = 'Общие';
         tabGeneral.style.cssText = 'padding:8px 16px;cursor:pointer;border-bottom:2px solid #4a90d9;color:#4a90d9;font-weight:bold;font-size:' + Math.round(14 * modalScale) + 'px;';
         tabs.appendChild(tabGeneral);
         var tabButtons = document.createElement('div');
-        tabButtons.id = 'lor-settings-tab-buttons'; tabButtons.textContent = 'Кнопки';
+        tabButtons.id = 'lor-settings-tab-buttons';
+        tabButtons.textContent = 'Кнопки';
         tabButtons.style.cssText = 'padding:8px 16px;cursor:pointer;border-bottom:2px solid transparent;color:' + (isDark ? '#888' : '#666') + ';font-size:' + Math.round(14 * modalScale) + 'px;';
         tabs.appendChild(tabButtons);
         var tabFilter = document.createElement('div');
-        tabFilter.id = 'lor-settings-tab-filter'; tabFilter.textContent = 'Фильтрация';
+        tabFilter.id = 'lor-settings-tab-filter';
+        tabFilter.textContent = 'Фильтрация';
         tabFilter.style.cssText = 'padding:8px 16px;cursor:pointer;border-bottom:2px solid transparent;color:' + (isDark ? '#888' : '#666') + ';font-size:' + Math.round(14 * modalScale) + 'px;';
         tabs.appendChild(tabFilter);
         var tabHelp = document.createElement('div');
-        tabHelp.id = 'lor-settings-tab-help'; tabHelp.textContent = 'Справка';
+        tabHelp.id = 'lor-settings-tab-help';
+        tabHelp.textContent = 'Справка';
         tabHelp.style.cssText = 'padding:8px 16px;cursor:pointer;border-bottom:2px solid transparent;color:' + (isDark ? '#888' : '#666') + ';font-size:' + Math.round(14 * modalScale) + 'px;';
         tabs.appendChild(tabHelp);
         modal.appendChild(tabs);
         var content = document.createElement('div');
         content.id = 'lor-settings-tab-content';
-        content.style.cssText = 'flex:1;overflow-y:auto;min-height:0;';
+        content.style.cssText = 'flex:1;overflow-y:auto;min-height:200px;max-height:60vh;';
         modal.appendChild(content);
         var footer = document.createElement('div');
-        footer.style.cssText = 'text-align:right;margin-top:16px;padding-top:12px;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';flex-shrink:0;';
-        var saveBtn = document.createElement('button'); saveBtn.id = 'lor-settings-save'; saveBtn.textContent = 'Сохранить';
+        footer.style.cssText = 'text-align:right;margin-top:16px;padding-top:12px;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';';
+        var saveBtn = document.createElement('button');
+        saveBtn.id = 'lor-settings-save';
+        saveBtn.textContent = 'Сохранить';
         saveBtn.style.cssText = 'padding:8px 20px;background:#0a3d6b;color:#ddd;border:1px solid #1a5a9a;border-radius:4px;cursor:pointer;font-size:' + Math.round(13 * modalScale) + 'px;margin-right:8px;';
         footer.appendChild(saveBtn);
-        var cancelBtn = document.createElement('button'); cancelBtn.id = 'lor-settings-cancel'; cancelBtn.textContent = 'Отмена';
+        var cancelBtn = document.createElement('button');
+        cancelBtn.id = 'lor-settings-cancel';
+        cancelBtn.textContent = 'Отмена';
         cancelBtn.style.cssText = 'padding:8px 20px;background:' + (isDark ? '#2a2a3a' : '#e0e0e0') + ';color:' + (isDark ? '#aaa' : '#666') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;cursor:pointer;font-size:' + Math.round(13 * modalScale) + 'px;';
         footer.appendChild(cancelBtn);
         modal.appendChild(footer);
-        overlay.appendChild(modal); document.body.appendChild(overlay);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
         var currentTab = 'general';
+
         var closeSettings = function() { overlay.remove(); };
         overlay._closeLorModal = closeSettings;
 
@@ -612,65 +613,67 @@
             var mobileDiv = document.createElement('div'); mobileDiv.style.cssText = 'margin-bottom:16px;';
             var mobileLabel = document.createElement('label'); mobileLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
             var mobileCheck = document.createElement('input'); mobileCheck.type = 'checkbox'; mobileCheck.id = 'lor-setting-mobile-view'; mobileCheck.checked = settings.general.mobileView; mobileCheck.style.cssText = 'width:16px;height:16px;';
-            mobileLabel.appendChild(mobileCheck); var mobileText = document.createElement('span'); mobileText.textContent = 'Мобильный вид (свайп-панель)'; mobileLabel.appendChild(mobileText);
+            mobileLabel.appendChild(mobileCheck);
+            var mobileText = document.createElement('span'); mobileText.textContent = 'Мобильный вид (свайп-панель)'; mobileLabel.appendChild(mobileText);
             mobileDiv.appendChild(mobileLabel); content.appendChild(mobileDiv);
             var borderDiv = document.createElement('div'); borderDiv.style.cssText = 'margin-bottom:16px;';
             var borderLabel = document.createElement('label'); borderLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
             var borderCheck = document.createElement('input'); borderCheck.type = 'checkbox'; borderCheck.id = 'lor-setting-border'; borderCheck.checked = settings.general.showBorder; borderCheck.style.cssText = 'width:16px;height:16px;';
-            borderLabel.appendChild(borderCheck); var borderText = document.createElement('span'); borderText.textContent = 'Отображать рамку панели'; borderLabel.appendChild(borderText);
+            borderLabel.appendChild(borderCheck);
+            var borderText = document.createElement('span'); borderText.textContent = 'Отображать рамку панели'; borderLabel.appendChild(borderText);
             borderDiv.appendChild(borderLabel); content.appendChild(borderDiv);
             var scaleDiv = document.createElement('div'); scaleDiv.style.cssText = 'margin-bottom:16px;';
             var scaleLabel = document.createElement('label'); scaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
             var scaleText = document.createElement('span'); scaleText.textContent = 'Масштаб панели:'; scaleLabel.appendChild(scaleText);
-            var scaleSelect = document.createElement('select'); scaleSelect.id = 'lor-setting-scale'; scaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;width:100%;box-sizing:border-box;';
+            var scaleSelect = document.createElement('select'); scaleSelect.id = 'lor-setting-scale'; scaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
             for (var s = 30; s <= 200; s += 10) { var opt = document.createElement('option'); opt.value = s; opt.textContent = s + '%'; if (settings.general.scale === s) opt.selected = true; scaleSelect.appendChild(opt); }
             scaleLabel.appendChild(scaleSelect); scaleDiv.appendChild(scaleLabel); content.appendChild(scaleDiv);
             var mobScaleDiv = document.createElement('div'); mobScaleDiv.style.cssText = 'margin-bottom:16px;';
             var mobScaleLabel = document.createElement('label'); mobScaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
             var mobScaleText = document.createElement('span'); mobScaleText.textContent = 'Масштаб в мобильном виде:'; mobScaleLabel.appendChild(mobScaleText);
-            var mobScaleSelect = document.createElement('select'); mobScaleSelect.id = 'lor-setting-mobile-scale'; mobScaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;width:100%;box-sizing:border-box;';
+            var mobScaleSelect = document.createElement('select'); mobScaleSelect.id = 'lor-setting-mobile-scale'; mobScaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
             for (var ms = 30; ms <= 300; ms += 10) { var mopt = document.createElement('option'); mopt.value = ms; mopt.textContent = ms + '%'; if (settings.general.mobileScale === ms) mopt.selected = true; mobScaleSelect.appendChild(mopt); }
             mobScaleLabel.appendChild(mobScaleSelect); mobScaleDiv.appendChild(mobScaleLabel); content.appendChild(mobScaleDiv);
             var modalScaleDiv = document.createElement('div'); modalScaleDiv.style.cssText = 'margin-bottom:16px;';
             var modalScaleLabel = document.createElement('label'); modalScaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
             var modalScaleText = document.createElement('span'); modalScaleText.textContent = 'Масштаб модальных окон:'; modalScaleLabel.appendChild(modalScaleText);
-            var modalScaleSelect = document.createElement('select'); modalScaleSelect.id = 'lor-setting-modal-scale'; modalScaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;width:100%;box-sizing:border-box;';
+            var modalScaleSelect = document.createElement('select'); modalScaleSelect.id = 'lor-setting-modal-scale'; modalScaleSelect.style.cssText = 'padding:6px 10px;background:' + (isDark ? '#111' : '#f5f5f5') + ';color:' + (isDark ? '#ccc' : '#333') + ';border:1px solid ' + (isDark ? '#444' : '#ccc') + ';border-radius:4px;font-size:' + Math.round(14 * modalScale) + 'px;margin-top:4px;';
             for (var mms = 30; mms <= 200; mms += 10) { var mmopt = document.createElement('option'); mmopt.value = mms; mmopt.textContent = mms + '%'; if (settings.general.modalScale === mms) mmopt.selected = true; modalScaleSelect.appendChild(mmopt); }
             modalScaleLabel.appendChild(modalScaleSelect); modalScaleDiv.appendChild(modalScaleLabel); content.appendChild(modalScaleDiv);
         }
 
         function renderButtonsTab() {
             content.innerHTML = '';
-            var btnNames = { up: '▲ Наверх', forum: '📋 Форум', tracker: '☰ Трекер', notifications: '🔔 Уведомления', saved: '💾 Сохраненные', myComment: '💬 Мои сообщения', mention: '📢 Упоминания', blacklist: '🚫 Чёрный список', visits: '🕐 Посещения', down: '▼ Вниз', help: '❓ Справка', toggleCode: ' </ > Код' };
+            var btnNames = { up: '▲ Наверх', forum: '📋 Форум', tracker: '☰ Трекер', notifications: '🔔 Уведомления', saved: '💾 Сохраненные', myComment: '💬 Мои сообщения', mention: '📢 Упоминания', blacklist: '🚫 Чёрный список', visits: '🕐 Посещения', down: '▼ Вниз', help: '❓ Справка', toggleCode: '</> Код' };
             var allButtonIds = settings.buttonOrder.slice();
             for (var key in settings.buttons) { if (allButtonIds.indexOf(key) === -1 && key !== 'profile') allButtonIds.push(key); }
             settings.customButtons.forEach(function(cb) { if (allButtonIds.indexOf(cb.id) === -1) allButtonIds.push(cb.id); });
             for (var name in btnNames) { if (allButtonIds.indexOf(name) === -1) allButtonIds.push(name); }
-            var headerDiv = document.createElement('div'); headerDiv.style.cssText = 'display:flex;align-items:center;margin-bottom:8px;padding:0 8px;font-weight:bold;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#aaa' : '#666') + ';flex-wrap:wrap;';
+            var headerDiv = document.createElement('div'); headerDiv.style.cssText = 'display:flex;align-items:center;margin-bottom:8px;padding:0 8px;font-weight:bold;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#aaa' : '#666') + ';';
             var nameHeader = document.createElement('span'); nameHeader.textContent = 'Кнопка'; nameHeader.style.cssText = 'flex:1;'; headerDiv.appendChild(nameHeader);
-            var posLabels = [' Справа', 'Слева', 'Сверху', 'Снизу']; var posKeys = ['right', 'left', 'top', 'bottom'];
+            var posLabels = ['Справа', 'Слева', 'Сверху', 'Снизу']; var posKeys = ['right', 'left', 'top', 'bottom'];
             posKeys.forEach(function(pos, index) { var posSpan = document.createElement('span'); posSpan.textContent = posLabels[index]; posSpan.style.cssText = 'width:55px;text-align:center;font-size:' + Math.round(11 * modalScale) + 'px;'; headerDiv.appendChild(posSpan); });
             var actionsHeader = document.createElement('span'); actionsHeader.style.cssText = 'width:60px;text-align:center;font-size:' + Math.round(11 * modalScale) + 'px;'; actionsHeader.textContent = 'Действ.'; headerDiv.appendChild(actionsHeader);
             content.appendChild(headerDiv);
             var separator = document.createElement('div'); separator.style.cssText = 'border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';margin-bottom:8px;'; content.appendChild(separator);
             var profileConfig = settings.buttons['profile']; if (!profileConfig || typeof profileConfig !== 'object') { profileConfig = { right: true, left: false, top: false, bottom: false }; settings.buttons['profile'] = profileConfig; }
             var profilePosition = 'right'; posKeys.forEach(function(pos) { if (profileConfig[pos]) profilePosition = pos; });
-            var profileDiv = document.createElement('div'); profileDiv.style.cssText = 'margin-bottom:10px;display:flex;align-items:center;gap:4px;padding:8px 8px;border-radius:4px;background:' + (isDark ? '#1a1a2e' : '#f0f4f8') + ';border:1px solid #4a90d9;flex-wrap:wrap;';
-            var profileLabel = document.createElement('label'); profileLabel.style.cssText = 'flex:1;display:flex;align-items:center;gap:4px;font-weight:bold;min-width:100px;';
+            var profileDiv = document.createElement('div'); profileDiv.style.cssText = 'margin-bottom:10px;display:flex;align-items:center;gap:4px;padding:8px 8px;border-radius:4px;background:' + (isDark ? '#1a1a2e' : '#f0f4f8') + ';border:1px solid #4a90d9;';
+            var profileLabel = document.createElement('label'); profileLabel.style.cssText = 'flex:1;display:flex;align-items:center;gap:4px;font-weight:bold;';
             var profileSpan = document.createElement('span'); profileSpan.textContent = '👤 Профиль'; profileSpan.style.cssText = 'color:#4a90d9;'; profileLabel.appendChild(profileSpan); profileDiv.appendChild(profileLabel);
             posKeys.forEach(function(pos, index) { var radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'lor-profile-position'; radio.className = 'lor-setting-profile-radio'; radio.setAttribute('data-pos', pos); radio.checked = (pos === profilePosition); radio.style.cssText = 'width:14px;height:14px;margin:0;cursor:pointer;accent-color:#4a90d9;'; radio.title = 'Профиль ' + posLabels[index]; radio.onchange = function() { if (this.checked) { posKeys.forEach(function(p) { settings.buttons['profile'][p] = false; }); settings.buttons['profile'][pos] = true; } }; var radioWrapper = document.createElement('div'); radioWrapper.style.cssText = 'width:55px;display:flex;justify-content:center;'; radioWrapper.appendChild(radio); profileDiv.appendChild(radioWrapper); });
             var profileActions = document.createElement('div'); profileActions.style.cssText = 'width:60px;'; profileDiv.appendChild(profileActions); content.appendChild(profileDiv);
             var profileHint = document.createElement('div'); profileHint.style.cssText = 'margin-bottom:12px;padding:4px 8px;font-size:' + Math.round(11 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';font-style:italic;'; profileHint.textContent = 'Профиль всегда отображается ровно на одной панели'; content.appendChild(profileHint);
             var separator2 = document.createElement('div'); separator2.style.cssText = 'border-bottom:1px solid ' + (isDark ? '#333' : '#ccc') + ';margin-bottom:10px;'; content.appendChild(separator2);
             allButtonIds.forEach(function(btnId) {
-                if (btnId == 'profile') return;
+                if (btnId === 'profile') return;
                 var isCustom = btnId.startsWith('custom_'); var customBtn = null;
                 if (isCustom) { customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; }); if (!customBtn) return; }
                 else if (!btnNames[btnId]) return;
                 var btnConfig = settings.buttons[btnId]; if (!btnConfig || typeof btnConfig !== 'object') { btnConfig = { right: false, left: false, top: false, bottom: false }; settings.buttons[btnId] = btnConfig; }
                 var isActive = btnConfig.right || btnConfig.left || btnConfig.top || btnConfig.bottom;
-                var div = document.createElement('div'); div.style.cssText = 'margin-bottom:8px;display:flex;align-items:center;gap:4px;padding:6px 8px;border-radius:4px;flex-wrap:wrap;' + (isActive ? '' : 'opacity:0.7;');
-                var label = document.createElement('label'); label.style.cssText = 'flex:1;display:flex;align-items:center;gap:4px;cursor:pointer;min-width:100px;';
+                var div = document.createElement('div'); div.style.cssText = 'margin-bottom:8px;display:flex;align-items:center;gap:4px;padding:6px 8px;border-radius:4px;' + (isActive ? '' : 'opacity:0.7;');
+                var label = document.createElement('label'); label.style.cssText = 'flex:1;display:flex;align-items:center;gap:4px;cursor:pointer;';
                 var span = document.createElement('span'); span.textContent = isCustom && customBtn ? customBtn.icon + ' ' + customBtn.title : btnNames[btnId] || btnId; if (!isActive) span.style.textDecoration = 'line-through'; label.appendChild(span); div.appendChild(label);
                 posKeys.forEach(function(pos, index) { var cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'lor-setting-btn'; cb.setAttribute('data-key', btnId); cb.setAttribute('data-pos', pos); cb.checked = btnConfig[pos] || false; cb.style.cssText = 'width:14px;height:14px;margin:0;cursor:pointer;'; cb.title = posLabels[index]; cb.onchange = function() { settings.buttons[btnId][pos] = this.checked; var nowActive = settings.buttons[btnId].right || settings.buttons[btnId].left || settings.buttons[btnId].top || settings.buttons[btnId].bottom; if (nowActive) { div.style.opacity = '1'; span.style.textDecoration = 'none'; } else { div.style.opacity = '0.7'; span.style.textDecoration = 'line-through'; } }; var cbWrapper = document.createElement('div'); cbWrapper.style.cssText = 'width:55px;display:flex;justify-content:center;'; cbWrapper.appendChild(cb); div.appendChild(cbWrapper); });
                 var actionsDiv = document.createElement('div'); actionsDiv.style.cssText = 'width:60px;display:flex;gap:4px;justify-content:center;';
@@ -686,24 +689,29 @@
             var enabledDiv = document.createElement('div'); enabledDiv.style.cssText = 'margin-bottom:16px;';
             var enabledLabel = document.createElement('label'); enabledLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
             var enabledCheck = document.createElement('input'); enabledCheck.type = 'checkbox'; enabledCheck.id = 'lor-filter-enabled'; enabledCheck.checked = settings.filter.enabled; enabledCheck.style.cssText = 'width:16px;height:16px;';
-            enabledLabel.appendChild(enabledCheck); var enabledText = document.createElement('span'); enabledText.textContent = 'Включить фильтрацию новостей по чёрному списку'; enabledLabel.appendChild(enabledText);
+            enabledLabel.appendChild(enabledCheck);
+            var enabledText = document.createElement('span'); enabledText.textContent = 'Включить фильтрацию новостей по чёрному списку'; enabledLabel.appendChild(enabledText);
             enabledDiv.appendChild(enabledLabel); content.appendChild(enabledDiv);
             var modeDiv = document.createElement('div'); modeDiv.style.cssText = 'margin-bottom:16px;';
             var modeTitle = document.createElement('div'); modeTitle.textContent = 'Режим обработки:'; modeTitle.style.cssText = 'font-weight:bold;margin-bottom:8px;'; modeDiv.appendChild(modeTitle);
             var cutLabel = document.createElement('label'); cutLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;';
             var cutRadio = document.createElement('input'); cutRadio.type = 'radio'; cutRadio.name = 'lor-filter-mode'; cutRadio.value = 'cut'; cutRadio.checked = settings.filter.mode === 'cut'; cutRadio.style.cssText = 'width:16px;height:16px;';
-            cutLabel.appendChild(cutRadio); var cutText = document.createElement('span'); cutText.innerHTML = '<b>Вырезать</b> новости (скрывать) + бесконечная лента'; cutLabel.appendChild(cutText); modeDiv.appendChild(cutLabel);
+            cutLabel.appendChild(cutRadio);
+            var cutText = document.createElement('span'); cutText.innerHTML = '<b>Вырезать</b> новости (скрывать) + бесконечная лента'; cutLabel.appendChild(cutText); modeDiv.appendChild(cutLabel);
             var blurLabel = document.createElement('label'); blurLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
             var blurRadio = document.createElement('input'); blurRadio.type = 'radio'; blurRadio.name = 'lor-filter-mode'; blurRadio.value = 'blur'; blurRadio.checked = settings.filter.mode === 'blur'; blurRadio.style.cssText = 'width:16px;height:16px;';
-            blurLabel.appendChild(blurRadio); var blurText = document.createElement('span'); blurText.innerHTML = '<b>Размывать</b> новости (blur) — без бесконечной ленты'; blurLabel.appendChild(blurText); modeDiv.appendChild(blurLabel); content.appendChild(modeDiv);
+            blurLabel.appendChild(blurRadio);
+            var blurText = document.createElement('span'); blurText.innerHTML = '<b>Размывать</b> новости (blur) — без бесконечной ленты'; blurLabel.appendChild(blurText); modeDiv.appendChild(blurLabel); content.appendChild(modeDiv);
             var miniDiv = document.createElement('div'); miniDiv.style.cssText = 'margin-bottom:16px;';
             var miniLabel = document.createElement('label'); miniLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
             var miniCheck = document.createElement('input'); miniCheck.type = 'checkbox'; miniCheck.id = 'lor-filter-mini'; miniCheck.checked = settings.filter.applyToMini; miniCheck.style.cssText = 'width:16px;height:16px;';
-            miniLabel.appendChild(miniCheck); var miniText = document.createElement('span'); miniText.textContent = 'Проверять авторов мини-новостей (через загрузку страницы)'; miniLabel.appendChild(miniText); miniDiv.appendChild(miniLabel); content.appendChild(miniDiv);
+            miniLabel.appendChild(miniCheck);
+            var miniText = document.createElement('span'); miniText.textContent = 'Проверять авторов мини-новостей (через загрузку страницы)'; miniLabel.appendChild(miniText); miniDiv.appendChild(miniLabel); content.appendChild(miniDiv);
             var animateDiv = document.createElement('div'); animateDiv.style.cssText = 'margin-bottom:16px;';
             var animateLabel = document.createElement('label'); animateLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
             var animateCheck = document.createElement('input'); animateCheck.type = 'checkbox'; animateCheck.id = 'lor-filter-animate'; animateCheck.checked = settings.filter.animateBlur; animateCheck.style.cssText = 'width:16px;height:16px;';
-            animateLabel.appendChild(animateCheck); var animateText = document.createElement('span'); animateText.textContent = 'Анимировать появление/исчезновение блюра'; animateLabel.appendChild(animateText); animateDiv.appendChild(animateLabel); content.appendChild(animateDiv);
+            animateLabel.appendChild(animateCheck);
+            var animateText = document.createElement('span'); animateText.textContent = 'Анимировать появление/исчезновение блюра'; animateLabel.appendChild(animateText); animateDiv.appendChild(animateLabel); content.appendChild(animateDiv);
             var deletedDiv = document.createElement('div'); deletedDiv.style.cssText = 'margin-bottom:16px;';
             var deletedTitle = document.createElement('div'); deletedTitle.textContent = 'Удалённые сообщения:'; deletedTitle.style.cssText = 'font-weight:bold;margin-bottom:8px;'; deletedDiv.appendChild(deletedTitle);
             var deletedOptions = [{ value: 'show', text: 'Отображать удалённые' }, { value: 'blur', text: 'Размывать удалённые' }, { value: 'hide', text: 'Не отображать удалённые' }];
@@ -724,7 +732,7 @@
                 { title: '💬 Кнопка "Мои сообщения"', content: '<b>ЛКМ:</b> Прокручивает страницу к вашему последнему комментарию и подсвечивает его синей рамкой на 3 секунды.' },
                 { title: '📢 Кнопка "Упоминания"', content: '<b>ЛКМ:</b> Прокручивает страницу к последнему упоминанию вашего ника и подсвечивает его оранжевой рамкой на 3 секунды.' },
                 { title: '🚫 Кнопка "Чёрный список"', content: '<b>ЛКМ:</b> Открывает модальное окно управления чёрным списком авторов. Можно добавлять и удалять ники.<br><b>ПКМ (долгое нажатие) на странице новости:</b> Автоматически добавляет автора текущей новости в чёрный список.' },
-                { title: '🕐 Кнопка "Посещения"', content: '<b>ЛКМ:</b> Открывает модальное окно со списком отслеживаемых пользователей и датами их последних посещений. Имена кликабельны — ведут в профиль.<br><b>ПКМ (долгое нажатие):</b> Добавляет автора текущей новости/темы в список отслеживаемых. В модальном окне можно вручную добавить/удалить пользователей и обновить данные.<br><b>Наведение на ник в "Ответ на ":</b> Показывает всплывающую подсказку с датой последнего посещения пользователя (загружается с его профиля).' },
+                { title: '🕐 Кнопка "Посещения"', content: '<b>ЛКМ:</b> Открывает модальное окно со списком отслеживаемых пользователей и датами их последних посещений. Имена кликабельны — ведут в профиль.<br><b>ПКМ (долгое нажатие):</b> Добавляет автора текущей новости/темы в список отслеживаемых. В модальном окне можно вручную добавить/удалить пользователей и обновить данные.<br><b>Наведение на ник в "Ответ на":</b> Показывает всплывающую подсказку с датой последнего посещения пользователя (загружается с его профиля).' },
                 { title: '❓ Кнопка "Справка"', content: 'Открывает окно справки по всем функциям. По умолчанию находится только на левой панели.' },
                 { title: '➕ Пользовательские кнопки', content: 'Вы можете добавить свои кнопки с произвольными ссылками. Нажмите ПКМ на кнопку профиля, затем на "+" и введите URL, название и выберите иконку. Кнопка появится на панели. В настройках можно изменить порядок кнопок или удалить пользовательские.' },
                 { title: '👤 Кнопка "Профиль"', content: '<b>ЛКМ:</b> Переход в ваш профиль.<br><b>ПКМ:</b> Показывает кнопку настроек (⚙) и кнопку добавления (+).' },
@@ -894,117 +902,31 @@
     function showNotificationsModal() {
         if (currentModal) { currentModal.remove(); currentModal = null; }
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
-        const content = document.createElement('div');
-        content.style.cssText = 'overflow-y:auto;flex:1;min-height:200px;text-align:center;';
-        content.textContent = 'Загрузка...';
+        const content = document.createElement('div'); content.style.cssText = 'overflow-y:auto;flex:1;min-height:200px;text-align:center;'; content.textContent = 'Загрузка...';
         const modal = createModal('Уведомления', 700, content, 100002);
-
-        fetch('https://www.linux.org.ru/notifications')
-            .then(r => r.text())
-            .then(html => {
-                const doc = new DOMParser().parseFromString(html, 'text/html');
-                const notifs = [];
-                const rows = doc.querySelectorAll('table.message-table tbody tr');
-                rows.forEach(row => {
-                    const lnk = row.querySelector('td:nth-child(2) a');
-                    const tm = row.querySelector('time');
-                    if (lnk) {
-                        const tags = [];
-                        lnk.querySelectorAll('.tag').forEach(t => tags.push(t.textContent.trim()));
-                        const ft = row.textContent.trim();
-                        const cm = ft.match(/((Новости|Форум|Трекер|Галерея|Статьи))/);
-                        const cat = cm ? cm[1] : '';
-                        notifs.push({ url: lnk.href, title: lnk.textContent.trim(), tags, category: cat, time: tm ? tm.textContent.trim() : '' });
-                    }
-                });
-
-                content.innerHTML = '';
-                content.style.textAlign = 'left';
-                if (notifs.length === 0) {
-                    content.textContent = 'Нет уведомлений';
-                    content.style.textAlign = 'center';
-                    return;
-                }
-
-                const list = document.createElement('div');
-                list.style.cssText = `display:flex;flex-direction:column;gap:${Math.round(8 * modalScale)}px;`;
-
-                notifs.forEach(nf => {
-                    const row = createListRow(modalScale, isDark);
-                    row.setAttribute('data-notif-url', nf.url);
-
-                    const info = document.createElement('div');
-                    info.style.cssText = 'flex:1;';
-                    if (nf.category) {
-                        const cd = document.createElement('div');
-                        cd.textContent = nf.category;
-                        cd.style.cssText = `font-size:${Math.round(11 * modalScale)}px;color:#4a90d9;margin-bottom:${Math.round(4 * modalScale)}px;`;
-                        info.appendChild(cd);
-                    }
-
-                    const td = document.createElement('div');
-                    td.textContent = nf.title;
-                    td.style.cssText = 'font-weight:bold;';
-                    info.appendChild(td);
-
-                    if (nf.tags.length > 0) {
-                        const tg = document.createElement('div');
-                        tg.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:' + Math.round(4 * modalScale) + 'px;';
-                        nf.tags.forEach(t => {
-                            const ts = document.createElement('span');
-                            ts.textContent = t;
-                            ts.style.cssText = `font-size:${Math.round(10 * modalScale)}px;padding:2px 6px;background:${isDark ? '#1a1a2e' : '#f0f0f0'};border-radius:3px;`;
-                            tg.appendChild(ts);
-                        });
-                        info.appendChild(tg);
-                    }
-                    row.appendChild(info);
-
-                    if (nf.time) {
-                        const tdTime = document.createElement('div');
-                        tdTime.textContent = nf.time;
-                        tdTime.style.cssText = `font-size:${Math.round(12 * modalScale)}px;color:${isDark ? '#888' : '#666'};margin-left:${Math.round(12 * modalScale)}px;white-space:nowrap;`;
-                        row.appendChild(tdTime);
-                    }
-
-                    row.onclick = e => {
-                        if (e.button === 0) {
-                            try {
-                                const match = nf.url.match(/[?&]cid=(\d+)/) || nf.url.match(/[?&]lastmod=(\d+)/);
-                                if (match) {
-                                    const commentId = match[1];
-                                    const topicPath = new URL(nf.url).pathname;
-
-                                    localStorage.setItem('lor_pending_scroll_target', JSON.stringify({
-                                        topicPath: topicPath,
-                                        commentId: commentId,
-                                        timestamp: Date.now()
-                                    }));
-
-                                    const positions = getScrollPositions();
-                                    positions[topicPath] = {
-                                        commentId: commentId.startsWith('topic-') ? commentId : 'comment-' + commentId,
-                                        scrollOffset: 0,
-                                        timestamp: Date.now(),
-                                        title: ''
-                                    };
-                                    saveScrollPositions(positions);
-                                }
-                            } catch (err) {
-                                console.warn('[NSLorPanel] Ошибка сохранения позиции уведомления:', err);
-                            }
-
-                            location.href = nf.url;
-                            if (currentModal) currentModal.close();
-                        }
-                    };
-
-                    row.onmousedown = e => { if (e.button === 1) { e.preventDefault(); window.open(nf.url, '_blank'); } };
-                    row.onauxclick = e => { if (e.button === 1) { e.preventDefault(); } };
-                    list.appendChild(row);
-                });
-                content.appendChild(list);
+        fetch('https://www.linux.org.ru/notifications').then(r => r.text()).then(html => {
+            const doc = new DOMParser().parseFromString(html, 'text/html'), notifs = [], rows = doc.querySelectorAll('table.message-table tbody tr');
+            rows.forEach(row => { const lnk = row.querySelector('td:nth-child(2) a'), tm = row.querySelector('time'); if (lnk) { const tags = []; lnk.querySelectorAll('.tag').forEach(t => { tags.push(t.textContent.trim()); }); const ft = row.textContent.trim(), cm = ft.match(/((Новости|Форум|Трекер|Галерея|Статьи))/), cat = cm ? cm[1] : ''; notifs.push({ url: lnk.href, title: lnk.textContent.trim(), tags: tags, category: cat, time: tm ? tm.textContent.trim() : '' }); } });
+            content.innerHTML = ''; content.style.textAlign = 'left';
+            if (notifs.length === 0) { content.textContent = 'Нет уведомлений'; content.style.textAlign = 'center'; return; }
+            const list = document.createElement('div'); list.style.cssText = `display:flex;flex-direction:column;gap:${Math.round(8 * modalScale)}px;`;
+            notifs.forEach(nf => {
+                const row = createListRow(modalScale, isDark);
+                // Добавляем атрибут data-notif-url для предпросмотра по долгому нажатию
+                row.setAttribute('data-notif-url', nf.url);
+                const info = document.createElement('div'); info.style.cssText = 'flex:1;';
+                if (nf.category) { const cd = document.createElement('div'); cd.textContent = nf.category; cd.style.cssText = `font-size:${Math.round(11 * modalScale)}px;color:#4a90d9;margin-bottom:${Math.round(4 * modalScale)}px;`; info.appendChild(cd); }
+                const td = document.createElement('div'); td.textContent = nf.title; td.style.cssText = 'font-weight:bold;'; info.appendChild(td);
+                if (nf.tags.length > 0) { const tg = document.createElement('div'); tg.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:' + Math.round(4 * modalScale) + 'px;'; nf.tags.forEach(t => { const ts = document.createElement('span'); ts.textContent = t; ts.style.cssText = `font-size:${Math.round(10 * modalScale)}px;padding:2px 6px;background:${isDark ? '#1a1a2e' : '#f0f0f0'};border-radius:3px;`; tg.appendChild(ts); }); info.appendChild(tg); }
+                row.appendChild(info);
+                if (nf.time) { const td = document.createElement('div'); td.textContent = nf.time; td.style.cssText = `font-size:${Math.round(12 * modalScale)}px;color:${isDark ? '#888' : '#666'};margin-left:${Math.round(12 * modalScale)}px;white-space:nowrap;`; row.appendChild(td); }
+                row.onclick = e => { if (e.button === 0) { location.href = nf.url; if (currentModal) currentModal.close(); } };
+                row.onmousedown = e => { if (e.button === 1) { e.preventDefault(); window.open(nf.url, '_blank'); } };
+                row.onauxclick = e => { if (e.button === 1) { e.preventDefault(); } };
+                list.appendChild(row);
             });
+            content.appendChild(list);
+        });
     }
 
     function parseForumSections(html) {
@@ -1045,19 +967,15 @@
 
     function goToMyLastComment() {
         const nick = getMyNick(); if (!nick) { alert('Не удалось определить ник.'); return; }
-        const s = getSettings(); const bhv = s.general.smoothScroll ? 'smooth' : 'auto';
-
         let last = null; document.querySelectorAll('article.msg').forEach(c => { const a = c.querySelector('a[href*="/people/"]'); if (a && a.textContent.trim() === nick) last = c; });
-        if (last) { last.scrollIntoView({ behavior: bhv, block: 'start' }); last.style.outline = '3px solid #4a90d9'; setTimeout(() => { last.style.outline = ''; }, 3000); }
+        if (last) { last.scrollIntoView({ behavior: 'smooth', block: 'start' }); last.style.outline = '3px solid #4a90d9'; setTimeout(() => { last.style.outline = ''; }, 3000); }
         else { alert('Ваших комментариев на этой странице нет.'); }
     }
 
     function goToLastMention() {
         const nick = getMyNick(); if (!nick) { alert('Не удалось определить ник.'); return; }
-        const s = getSettings(); const bhv = s.general.smoothScroll ? 'smooth' : 'auto';
-
         let last = null; document.querySelectorAll('article.msg').forEach(c => { const a = c.querySelector('a[href*="/people/"]'); const author = a ? a.textContent.trim() : ''; if (author !== nick && c.textContent.includes(nick)) last = c; });
-        if (last) { last.scrollIntoView({ behavior: bhv, block: 'start' }); last.style.outline = '3px solid #ff6600'; setTimeout(() => { last.style.outline = ''; }, 3000); }
+        if (last) { last.scrollIntoView({ behavior: 'smooth', block: 'start' }); last.style.outline = '3px solid #ff6600'; setTimeout(() => { last.style.outline = ''; }, 3000); }
         else { alert('Упоминаний вас на этой странице нет.'); }
     }
 
@@ -1079,16 +997,12 @@
     function scrollToComment(commentId) {
         if (!commentId || scrollPositionRestored) return;
         if (userHasScrolled) return;
-
-        const s = getSettings();
-        const bhv = s.general.smoothScroll ? 'smooth' : 'auto';
-
         const isTopic = commentId.startsWith('topic-');
         const elementId = isTopic ? commentId : 'comment-' + commentId;
         const element = document.getElementById(elementId);
         if (element) {
             scrollPositionRestored = true;
-            element.scrollIntoView({ behavior: bhv, block: 'center' });
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
             element.style.outline = '3px solid #4a90d9';
             element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
             setTimeout(function() {
@@ -1100,8 +1014,6 @@
 
     function restoreScrollPosition() {
         if (userHasScrolled) return;
-        const s = getSettings();
-        const bhv = s.general.smoothScroll ? 'smooth' : 'auto';
 
         try {
             var pendingRaw = localStorage.getItem('lor_pending_scroll_target');
@@ -1116,7 +1028,7 @@
                     var element = document.getElementById(elementId);
                     if (element) {
                         scrollPositionRestored = true;
-                        element.scrollIntoView({ behavior: bhv, block: 'center' });
+                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         element.style.outline = '3px solid #4a90d9';
                         element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
                         setTimeout(function() {
@@ -1144,7 +1056,7 @@
             var element = document.getElementById(elementId);
             if (element) {
                 scrollPositionRestored = true;
-                element.scrollIntoView({ behavior: bhv, block: 'center' });
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 element.style.outline = '3px solid #4a90d9';
                 element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
                 setTimeout(function() {
@@ -1170,7 +1082,7 @@
                     if (element) {
                         scrollPositionRestored = true;
                         var targetScroll = saved.scrollOffset ? element.getBoundingClientRect().top + window.pageYOffset + saved.scrollOffset : element.getBoundingClientRect().top + window.pageYOffset;
-                        window.scrollTo({ top: targetScroll, behavior: bhv });
+                        window.scrollTo({ top: targetScroll, behavior: 'smooth' });
                         element.style.outline = '3px solid #4a90d9';
                         element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
                         setTimeout(function() {
@@ -1483,6 +1395,7 @@
         var linkUrl = new URL(href);
         var topicPath = linkUrl.pathname;
 
+        // Сохраняем целевой комментарий
         var pending = {
             topicPath: topicPath,
             commentId: commentId,
@@ -1693,15 +1606,14 @@
         const settings = getSettings();
         const modalScale = settings.general.modalScale / 100;
         const isDark = isDarkTheme();
-        const SWIPE_THRESHOLD = 50;
-        const SWIPE_MAX_VERTICAL = 30;
 
         if (!document.getElementById('lor-preview-styles')) {
             const style = document.createElement('style');
             style.id = 'lor-preview-styles';
             style.textContent = `
                 .lor-comment-preview {
-                    position: fixed; z-index: 100001;
+                    position: fixed;
+                    z-index: 100001;
                     background: ${isDark ? '#0a0a14' : '#ffffff'};
                     color: ${isDark ? '#ccc' : '#333'};
                     border: 1px solid ${isDark ? '#333' : '#ccc'};
@@ -1715,13 +1627,18 @@
                     box-shadow: 0 ${Math.round(4 * modalScale)}px ${Math.round(20 * modalScale)}px rgba(0,0,0,${isDark ? '0.8' : '0.2'});
                 }
                 .lor-comment-preview .preview-header {
-                    color: #4a90d9; font-weight: bold;
+                    color: #4a90d9;
+                    font-weight: bold;
                     margin-bottom: ${Math.round(8 * modalScale)}px;
                     padding-bottom: ${Math.round(8 * modalScale)}px;
                     border-bottom: 1px solid ${isDark ? '#333' : '#ccc'};
                     font-size: ${Math.round(15 * modalScale)}px;
                 }
-                .lor-comment-preview .preview-body { line-height: 1.6; word-wrap: break-word; overflow-wrap: break-word; }
+                .lor-comment-preview .preview-body {
+                    line-height: 1.6;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                }
                 .lor-comment-preview .preview-body img { max-width: 100%; height: auto; }
                 .lor-comment-preview .preview-body pre,
                 .lor-comment-preview .preview-body code {
@@ -1749,6 +1666,7 @@
 
         function showPreview(commentUrl, x, y) {
             removePreview();
+
             const preview = document.createElement('div');
             preview.className = 'lor-comment-preview';
             preview.innerHTML = '<div class="preview-loading">Загрузка...</div>';
@@ -1757,31 +1675,42 @@
             document.body.appendChild(preview);
 
             const cid = new URL(commentUrl).searchParams.get('cid');
+
             fetch(commentUrl)
                 .then(r => r.text())
                 .then(html => {
                     const doc = new DOMParser().parseFromString(html, 'text/html');
                     let commentEl = doc.getElementById('comment-' + cid) || doc.getElementById(cid);
+
                     if (!commentEl) {
                         doc.querySelectorAll('article.msg').forEach(a => {
                             if (a.id === 'comment-' + cid || a.id === cid) commentEl = a;
                         });
                     }
+
                     if (commentEl) {
                         const author = commentEl.querySelector('a[href*="/people/"]')?.textContent.trim() || 'Аноним';
                         const bodyEl = commentEl.querySelector('.msg_body');
+
                         const clone = bodyEl ? bodyEl.cloneNode(true) : commentEl.cloneNode(true);
+
                         clone.querySelectorAll('.reply').forEach(el => el.remove());
                         clone.querySelectorAll('.btn-group').forEach(el => el.remove());
+
                         let body = clone.innerHTML;
                         body = body.replace(/<a\s+[^>]*onclick="[^"]*"[^>]*>/gi, '<a>');
+
                         body = body.replace(/<a[^>]*>\s*(?:Ответить|Реакции|Уведомить\s+модераторов|Ссылка|Править|Удалить|Восстановить|Отклонить|Показать\s+ответы?)\s*<\/a>/gi, '');
+
                         body = body.replace(/<li>\s*<\/li>/gi, '');
+
                         body = body.replace(/\s*\|\s*/g, ' ');
                         body = body.replace(/<span[^>]*class="[^"]*paragraph[^"]*"[^>]*>.*?<\/span>/gi, '');
                         body = body.replace(/¶/g, '');
                         body = body.trim();
+
                         const isDeleted = body.includes('Сообщение удалено') || body.includes('комментарий удален');
+
                         preview.innerHTML = `
                             <div class="preview-header">💬 ${author}</div>
                             <div class="preview-body">${isDeleted ? '<em style="color:#666">Сообщение удалено</em>' : body}</div>
@@ -1795,91 +1724,49 @@
                 });
         }
 
-        function initSwipeOnLink(link) {
-            if (link.dataset.lorSwipe) return;
-            link.dataset.lorSwipe = '1';
-
-            let mouseTimer = null, mouseBlocked = false, mouseSX = 0, mouseSY = 0;
-
-            link.addEventListener('mousedown', function(e) {
-                if (e.button !== 0) return;
-                mouseBlocked = false;
-                mouseSX = e.clientX;
-                mouseSY = e.clientY;
-                mouseTimer = setTimeout(() => {
-                    mouseBlocked = true;
-                    showPreview(link.href, mouseSX, mouseSY);
-                }, 500);
-            });
-
-            link.addEventListener('mousemove', function(e) {
-                if (mouseTimer && (Math.abs(e.clientX - mouseSX) > 5 || Math.abs(e.clientY - mouseSY) > 5)) {
-                    clearTimeout(mouseTimer);
-                    mouseTimer = null;
-                }
-            });
-
-            link.addEventListener('mouseup', function(e) {
-                if (mouseBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setTimeout(() => { mouseBlocked = false; }, 100);
-                }
-                clearTimeout(mouseTimer);
-                mouseTimer = null;
-            });
-
-            let touchStartX = 0, touchStartY = 0, touchSwiped = false, touchBlocked = false;
-
-            link.addEventListener('touchstart', function(e) {
-                if (e.touches.length !== 1) return;
-                touchStartX = e.touches[0].clientX;
-                touchStartY = e.touches[0].clientY;
-                touchSwiped = false;
-                touchBlocked = false;
-            }, { passive: true });
-
-            link.addEventListener('touchmove', function(e) {
-                if (e.touches.length !== 1 || touchSwiped) return;
-                const dx = e.touches[0].clientX - touchStartX;
-                const dy = Math.abs(e.touches[0].clientY - touchStartY);
-                if (dx > SWIPE_THRESHOLD && dy < SWIPE_MAX_VERTICAL) {
-                    e.preventDefault();
-                    touchSwiped = true;
-                    touchBlocked = true;
-                    showPreview(link.href, touchStartX, touchStartY);
-                }
-            }, { passive: false });
-
-            link.addEventListener('touchend', function(e) {
-                if (touchBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setTimeout(() => { touchBlocked = false; }, 100);
-                }
-                touchSwiped = false;
-            }, { passive: false });
-
-            link.addEventListener('touchcancel', function() {
-                touchSwiped = false;
-                touchBlocked = false;
-                removePreview();
-            });
-
-            link.addEventListener('click', function(e) {
-                if (mouseBlocked || touchBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    mouseBlocked = false;
-                    touchBlocked = false;
-                    return false;
-                }
-            }, true);
-        }
-
         document.querySelectorAll('article.msg div.title').forEach(title => {
             if (!title.textContent.includes('Ответ на:')) return;
-            title.querySelectorAll('a[href*="?cid="]').forEach(initSwipeOnLink);
+
+            title.querySelectorAll('a[href*="?cid="]').forEach(link => {
+                if (link.dataset.lorPrev) return;
+                link.dataset.lorPrev = '1';
+
+                let timer = null, blocked = false, sx = 0, sy = 0;
+
+                link.addEventListener('click', function(e) {
+                    if (blocked) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        blocked = false;
+                        return false;
+                    }
+                }, true);
+
+                link.addEventListener('mousedown', function(e) {
+                    if (e.button !== 0) return;
+                    blocked = false;
+                    sx = e.clientX;
+                    sy = e.clientY;
+                    timer = setTimeout(() => {
+                        blocked = true;
+                        showPreview(link.href, sx, sy);
+                    }, 500);
+                });
+
+                link.addEventListener('mousemove', function(e) {
+                    if (timer && (Math.abs(e.clientX - sx) > 5 || Math.abs(e.clientY - sy) > 5)) {
+                        clearTimeout(timer);
+                        timer = null;
+                    }
+                });
+
+                link.addEventListener('mouseup', function() {
+                    if (blocked) setTimeout(() => { blocked = false; }, 100);
+                    clearTimeout(timer);
+                    timer = null;
+                });
+            });
         });
 
         document.addEventListener('mousedown', function(e) {
@@ -1904,12 +1791,11 @@
         const settings = getSettings();
         const modalScale = settings.general.modalScale / 100;
         const isDark = isDarkTheme();
-        const SWIPE_THRESHOLD = 50;
-        const SWIPE_MAX_VERTICAL = 30;
 
         function showPreview(notificationUrl, x, y, notificationRow) {
             const old = document.querySelector('.lor-comment-preview');
             if (old) old.remove();
+
             const preview = document.createElement('div');
             preview.className = 'lor-comment-preview';
             preview.innerHTML = `<div style="text-align:center;padding:${Math.round(20 * modalScale)}px;color:${isDark ? '#666' : '#999'};">Загрузка...</div>`;
@@ -1925,12 +1811,14 @@
                     if (hashMatch) targetId = hashMatch[1];
                 }
                 if (!targetId) targetId = new URL(finalUrl).searchParams.get('lastmod');
+
                 let commentEl = null;
                 if (targetId) {
                     const ids = ['comment-'+targetId, targetId, 'topic-'+targetId];
                     for (const id of ids) { commentEl = doc.getElementById(id); if (commentEl) break; }
                     if (!commentEl) doc.querySelectorAll('article.msg').forEach(a => { if (ids.includes(a.id)) commentEl = a; });
                 }
+
                 if (commentEl) {
                     const author = commentEl.querySelector('a[href*="/people/"]')?.textContent.trim() || 'Аноним';
                     const bodyEl = commentEl.querySelector('.msg_body');
@@ -1956,91 +1844,54 @@
             if (p) p.remove();
         }
 
-        function initSwipeOnElement(el, getUrl) {
-            if (el.dataset.lorNotifSwipe) return;
-            el.dataset.lorNotifSwipe = '1';
+        let timer = null, blocked = false, sx = 0, sy = 0, currentRow = null;
 
-            let mouseTimer = null, mouseBlocked = false, mouseSX = 0, mouseSY = 0, mouseRow = null;
+        document.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return;
 
-            el.addEventListener('mousedown', function(e) {
-                if (e.button !== 0) return;
-                mouseBlocked = false;
-                mouseSX = e.clientX;
-                mouseSY = e.clientY;
-                mouseRow = el.closest('[data-notif-url]');
-                mouseTimer = setTimeout(() => {
-                    mouseBlocked = true;
-                    const url = typeof getUrl === 'function' ? getUrl(el) : el.getAttribute('data-notif-url') || el.href;
-                    showPreview(url, mouseSX, mouseSY, mouseRow);
-                }, 500);
-            });
+            const modalRow = e.target.closest('[data-notif-url]');
+            const pageLink = e.target.closest('table.message-table a[href*="cid="], table.message-table a[href*="lastmod="]');
 
-            el.addEventListener('mousemove', function(e) {
-                if (mouseTimer && (Math.abs(e.clientX - mouseSX) > 5 || Math.abs(e.clientY - mouseSY) > 5)) {
-                    clearTimeout(mouseTimer);
-                    mouseTimer = null;
-                }
-            });
+            if (!modalRow && !pageLink) return;
 
-            el.addEventListener('mouseup', function(e) {
-                if (mouseBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setTimeout(() => { mouseBlocked = false; }, 100);
-                }
-                clearTimeout(mouseTimer);
-                mouseTimer = null;
-            });
+            blocked = false;
+            sx = e.clientX;
+            sy = e.clientY;
+            currentRow = modalRow || pageLink.closest('tr');
 
-            let touchStartX = 0, touchStartY = 0, touchSwiped = false, touchBlocked = false, touchRow = null;
+            timer = setTimeout(() => {
+                blocked = true;
+                const url = modalRow ? modalRow.getAttribute('data-notif-url') : pageLink.href;
+                showPreview(url, sx, sy, currentRow);
+            }, 500);
+        });
 
-            el.addEventListener('touchstart', function(e) {
-                if (e.touches.length !== 1) return;
-                touchStartX = e.touches[0].clientX;
-                touchStartY = e.touches[0].clientY;
-                touchSwiped = false;
-                touchBlocked = false;
-                touchRow = el.closest('[data-notif-url]');
-            }, { passive: true });
+        document.addEventListener('mousemove', function(e) {
+            if (timer && (Math.abs(e.clientX - sx) > 5 || Math.abs(e.clientY - sy) > 5)) {
+                clearTimeout(timer);
+                timer = null;
+            }
+        });
 
-            el.addEventListener('touchmove', function(e) {
-                if (e.touches.length !== 1 || touchSwiped) return;
-                const dx = e.touches[0].clientX - touchStartX;
-                const dy = Math.abs(e.touches[0].clientY - touchStartY);
-                if (dx > SWIPE_THRESHOLD && dy < SWIPE_MAX_VERTICAL) {
-                    e.preventDefault();
-                    touchSwiped = true;
-                    touchBlocked = true;
-                    const url = typeof getUrl === 'function' ? getUrl(el) : el.getAttribute('data-notif-url') || el.href;
-                    showPreview(url, touchStartX, touchStartY, touchRow);
-                }
-            }, { passive: false });
+        document.addEventListener('mouseup', function(e) {
+            if (blocked) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                setTimeout(() => { blocked = false; }, 100);
+            }
+            clearTimeout(timer);
+            timer = null;
+        });
 
-            el.addEventListener('touchend', function(e) {
-                if (touchBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setTimeout(() => { touchBlocked = false; }, 100);
-                }
-                touchSwiped = false;
-            }, { passive: false });
-
-            el.addEventListener('touchcancel', function() {
-                touchSwiped = false;
-                touchBlocked = false;
-                removePreview();
-            });
-
-            el.addEventListener('click', function(e) {
-                if (mouseBlocked || touchBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    mouseBlocked = false;
-                    touchBlocked = false;
-                    return false;
-                }
-            }, true);
-        }
+        document.addEventListener('click', function(e) {
+            if (blocked) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                blocked = false;
+            }
+        }, true);
 
         document.addEventListener('mousedown', function(e) {
             const preview = document.querySelector('.lor-comment-preview');
@@ -2049,19 +1900,6 @@
 
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') removePreview();
-        });
-
-        const observer = new MutationObserver(() => {
-            document.querySelectorAll('[data-notif-url]').forEach(row => initSwipeOnElement(row, el => el.getAttribute('data-notif-url')));
-            document.querySelectorAll('table.message-table a[href*="cid="], table.message-table a[href*="lastmod="]').forEach(link => {
-                initSwipeOnElement(link, el => el.href);
-            });
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-
-        document.querySelectorAll('[data-notif-url]').forEach(row => initSwipeOnElement(row, el => el.getAttribute('data-notif-url')));
-        document.querySelectorAll('table.message-table a[href*="cid="], table.message-table a[href*="lastmod="]').forEach(link => {
-            initSwipeOnElement(link, el => el.href);
         });
     }
 
