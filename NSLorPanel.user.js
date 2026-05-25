@@ -24,7 +24,7 @@
     const ICONS = ['🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','🔶','🔷','🔸','🔹','🟥','🟧','🟨','🟩','🟦','🟪','⬛','⬜','🟫','❤️','❓','💚','🇦','🇧','🇨','🇩','🇪','🇫','🇬','🇭','🇮','🇯','🇰','🇱','🇲','🇳','🇴','🇵','🇶','🇷','🇸','🇹','🇺','🇻','🇼','🇽','🇾','🇿'];
 
     const BUTTON_DEFS = {
-        up: { text: '▲', title: 'Наверх', action: () => window.scrollTo({ top: 0, behavior: 'smooth' }), showSettings: true },
+        up: { text: '▲', title: 'Наверх', action: () => { const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto'; window.scrollTo({ top: 0, behavior: bhv }); }, showSettings: true },
         forum: { text: '📋', title: 'Форум', action: (e) => { if (!e || e.button === 0) location.href = 'https://www.linux.org.ru/forum/'; }, longPressAction: 'forum' },
         tracker: { text: '☰', title: 'Трекер', action: (e) => { if (!e || e.button === 0) location.href = 'https://www.linux.org.ru/tracker/'; }, longPressAction: 'tracker' },
         notifications: { text: '🔔', title: 'Уведомления', action: (e) => { if (!e || e.button === 0) location.href = 'https://www.linux.org.ru/notifications'; }, longPressAction: 'notifications' },
@@ -33,7 +33,7 @@
         mention: { text: '📢', title: 'Упоминания', action: goToMyLastComment },
         blacklist: { text: '🚫', title: 'Чёрный список', action: showBlacklistModal, longPressAction: 'blacklist' },
         visits: { text: '🕐', title: 'Посещения', action: showVisitsModal, longPressAction: 'visits' },
-        down: { text: '▼', title: 'Вниз', action: () => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), showSettings: true },
+        down: { text: '▼', title: 'Вниз', action: () => { const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto'; window.scrollTo({ top: document.body.scrollHeight, behavior: bhv }); }, showSettings: true },
         help: { text: '❓', title: 'Справка', action: showHelpModal },
         toggleCode: { text: '</>', title: 'Развернуть/Свернуть весь код', action: toggleAllCodeBlocks }
     };
@@ -97,7 +97,7 @@
 
     function getDefaultSettings() {
         return {
-            general: { showBorder: false, scale: 100, modalScale: 100, mobileView: false, mobileScale: 120, orientation: 'vertical', smoothScroll: true },
+            general: { showBorder: false, scale: 100, modalScale: 100, mobileView: false, mobileScale: 120, orientation: 'vertical', smoothScroll: true, enableAnimations: true },
             filter: { enabled: true, mode: 'cut', applyToMini: true, animateBlur: true, deletedMode: 'hide' },
             buttons: {
                 profile: { right: true, left: false, top: false, bottom: false },
@@ -127,6 +127,7 @@
                 if (!saved.general) saved.general = def.general;
                 if (saved.general.showBorder === undefined) saved.general.showBorder = def.general.showBorder;
                 if (saved.general.mobileView === undefined) saved.general.mobileView = def.general.mobileView;
+                if (saved.general.enableAnimations === undefined) saved.general.enableAnimations = def.general.enableAnimations;
                 if (!saved.general.scale || saved.general.scale < 30 || saved.general.scale > 200) saved.general.scale = def.general.scale;
                 if (!saved.general.modalScale || saved.general.modalScale < 30 || saved.general.modalScale > 200) saved.general.modalScale = def.general.modalScale;
                 if (!saved.general.mobileScale || saved.general.mobileScale < 30 || saved.general.mobileScale > 300) saved.general.mobileScale = def.general.mobileScale;
@@ -359,7 +360,7 @@
         if (settings.general.showBorder) { collapsed.style.border = '1px solid ' + colors.borderColor; collapsed.style.borderRadius = '12px'; collapsed.style.padding = padding + 'px'; }
         collapsed.style.flexDirection = (mainPos === 'right' || mainPos === 'left') ? 'column' : 'row';
         const upBtn = createButton('▲', 'Наверх', null, false, settings.general.mobileScale); upBtn.style.position = 'relative';
-        upBtn.onclick = e => { if (upBtn._cmjf) { e.preventDefault(); e.stopPropagation(); return; } window.scrollTo({ top: 0, behavior: 'smooth' }); };
+        upBtn.onclick = e => { if (upBtn._cmjf) { e.preventDefault(); e.stopPropagation(); return; } const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto'; window.scrollTo({ top: 0, behavior: bhv }); };
         upBtn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showExtraButtons(upBtn, mainPos); });
         collapsed.appendChild(upBtn);
         const notifBtn = createButton('🔔', 'Уведомления', null, false, settings.general.mobileScale);
@@ -368,7 +369,7 @@
         collapsed.appendChild(notifBtn);
         if (settings.buttons['notifications'] && settings.buttons['notifications'][mainPos]) { updateNotificationBadge(notifBtn); allButtons['notifications_' + mainPos] = notifBtn; }
         const downBtn = createButton('▼', 'Вниз', null, false, settings.general.mobileScale); downBtn.style.position = 'relative';
-        downBtn.onclick = e => { if (downBtn._cmjf) { e.preventDefault(); e.stopPropagation(); return; } window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); };
+        downBtn.onclick = e => { if (downBtn._cmjf) { e.preventDefault(); e.stopPropagation(); return; } const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto'; window.scrollTo({ top: document.body.scrollHeight, behavior: bhv }); };
         downBtn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showExtraButtons(downBtn, mainPos); });
         collapsed.appendChild(downBtn);
         document.body.appendChild(collapsed); mobileCollapsedContainers[mainPos] = collapsed;
@@ -619,6 +620,11 @@
             var borderCheck = document.createElement('input'); borderCheck.type = 'checkbox'; borderCheck.id = 'lor-setting-border'; borderCheck.checked = settings.general.showBorder; borderCheck.style.cssText = 'width:16px;height:16px;';
             borderLabel.appendChild(borderCheck); var borderText = document.createElement('span'); borderText.textContent = 'Отображать рамку панели'; borderLabel.appendChild(borderText);
             borderDiv.appendChild(borderLabel); content.appendChild(borderDiv);
+            var animDiv = document.createElement('div'); animDiv.style.cssText = 'margin-bottom:16px;';
+            var animLabel = document.createElement('label'); animLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var animCheck = document.createElement('input'); animCheck.type = 'checkbox'; animCheck.id = 'lor-setting-animations'; animCheck.checked = settings.general.enableAnimations; animCheck.style.cssText = 'width:16px;height:16px;';
+            animLabel.appendChild(animCheck); var animText = document.createElement('span'); animText.textContent = 'Включить анимации переходов (плавный скролл, подсветка)'; animLabel.appendChild(animText);
+            animDiv.appendChild(animLabel); content.appendChild(animDiv);
             var scaleDiv = document.createElement('div'); scaleDiv.style.cssText = 'margin-bottom:16px;';
             var scaleLabel = document.createElement('label'); scaleLabel.style.cssText = 'display:block;margin-bottom:8px;';
             var scaleText = document.createElement('span'); scaleText.textContent = 'Масштаб панели:'; scaleLabel.appendChild(scaleText);
@@ -751,9 +757,10 @@
         tabHelp.onclick = function() { currentTab = 'help'; tabHelp.style.borderBottomColor = '#4a90d9'; tabHelp.style.color = '#4a90d9'; tabHelp.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal'; tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal'; renderHelpTab(); };
 
         saveBtn.onclick = function() {
-            var mobileViewCheck = document.getElementById('lor-setting-mobile-view'); var borderCheck = document.getElementById('lor-setting-border'); var scaleSelect = document.getElementById('lor-setting-scale'); var mobileScaleSelect = document.getElementById('lor-setting-mobile-scale'); var modalScaleSelect = document.getElementById('lor-setting-modal-scale');
+            var mobileViewCheck = document.getElementById('lor-setting-mobile-view'); var borderCheck = document.getElementById('lor-setting-border'); var animationsCheck = document.getElementById('lor-setting-animations'); var scaleSelect = document.getElementById('lor-setting-scale'); var mobileScaleSelect = document.getElementById('lor-setting-mobile-scale'); var modalScaleSelect = document.getElementById('lor-setting-modal-scale');
             if (mobileViewCheck) settings.general.mobileView = mobileViewCheck.checked;
             if (borderCheck) settings.general.showBorder = borderCheck.checked;
+            if (animationsCheck) settings.general.enableAnimations = animationsCheck.checked;
             if (scaleSelect) { var val = parseInt(scaleSelect.value); if (val >= 30 && val <= 200) settings.general.scale = val; }
             if (mobileScaleSelect) { var mval = parseInt(mobileScaleSelect.value); if (mval >= 30 && mval <= 300) settings.general.mobileScale = mval; }
             if (modalScaleSelect) { var mmval = parseInt(modalScaleSelect.value); if (mmval >= 30 && mmval <= 200) settings.general.modalScale = mmval; }
@@ -806,7 +813,7 @@
             const list = document.createElement('div'); list.style.cssText = `display:flex;flex-direction:column;gap:${Math.round(8 * modalScale)}px;`;
             sp.forEach((page, idx) => {
                 const row = createListRow(modalScale, isDark);
-                row.setAttribute('data-notif-url', nf.url);
+                row.setAttribute('data-notif-url', page.url);
                 const info = document.createElement('div'); info.style.cssText = 'flex:1;';
                 const td = document.createElement('div'); td.textContent = page.title; td.style.cssText = `font-weight:bold;margin-bottom:${Math.round(4 * modalScale)}px;`; info.appendChild(td);
                 const ud = document.createElement('div'); ud.textContent = page.url; ud.style.cssText = `font-size:${Math.round(11 * modalScale)}px;color:${isDark ? '#666' : '#999'};word-break:break-all;`; info.appendChild(ud);
@@ -990,9 +997,7 @@
                                     };
                                     saveScrollPositions(positions);
                                 }
-                            } catch (err) {
-                                console.warn('[NSLorPanel] Ошибка сохранения позиции уведомления:', err);
-                            }
+                            } catch (err) {}
 
                             location.href = nf.url;
                             if (currentModal) currentModal.close();
@@ -1045,20 +1050,30 @@
 
     function goToMyLastComment() {
         const nick = getMyNick(); if (!nick) { alert('Не удалось определить ник.'); return; }
-        const s = getSettings(); const bhv = s.general.smoothScroll ? 'smooth' : 'auto';
+        const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
 
         let last = null; document.querySelectorAll('article.msg').forEach(c => { const a = c.querySelector('a[href*="/people/"]'); if (a && a.textContent.trim() === nick) last = c; });
-        if (last) { last.scrollIntoView({ behavior: bhv, block: 'start' }); last.style.outline = '3px solid #4a90d9'; setTimeout(() => { last.style.outline = ''; }, 3000); }
-        else { alert('Ваших комментариев на этой странице нет.'); }
+        if (last) {
+            last.scrollIntoView({ behavior: bhv, block: 'start' });
+            if (s.general.enableAnimations) {
+                last.style.outline = '3px solid #4a90d9';
+                setTimeout(() => { last.style.outline = ''; }, 3000);
+            }
+        } else { alert('Ваших комментариев на этой странице нет.'); }
     }
 
     function goToLastMention() {
         const nick = getMyNick(); if (!nick) { alert('Не удалось определить ник.'); return; }
-        const s = getSettings(); const bhv = s.general.smoothScroll ? 'smooth' : 'auto';
+        const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
 
         let last = null; document.querySelectorAll('article.msg').forEach(c => { const a = c.querySelector('a[href*="/people/"]'); const author = a ? a.textContent.trim() : ''; if (author !== nick && c.textContent.includes(nick)) last = c; });
-        if (last) { last.scrollIntoView({ behavior: bhv, block: 'start' }); last.style.outline = '3px solid #ff6600'; setTimeout(() => { last.style.outline = ''; }, 3000); }
-        else { alert('Упоминаний вас на этой странице нет.'); }
+        if (last) {
+            last.scrollIntoView({ behavior: bhv, block: 'start' });
+            if (s.general.enableAnimations) {
+                last.style.outline = '3px solid #ff6600';
+                setTimeout(() => { last.style.outline = ''; }, 3000);
+            }
+        } else { alert('Упоминаний вас на этой странице нет.'); }
     }
 
     function toggleAllCodeBlocks() {
@@ -1081,7 +1096,7 @@
         if (userHasScrolled) return;
 
         const s = getSettings();
-        const bhv = s.general.smoothScroll ? 'smooth' : 'auto';
+        const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
 
         const isTopic = commentId.startsWith('topic-');
         const elementId = isTopic ? commentId : 'comment-' + commentId;
@@ -1089,19 +1104,21 @@
         if (element) {
             scrollPositionRestored = true;
             element.scrollIntoView({ behavior: bhv, block: 'center' });
-            element.style.outline = '3px solid #4a90d9';
-            element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
-            setTimeout(function() {
-                element.style.outline = '';
-                element.style.backgroundColor = '';
-            }, 3000);
+            if (s.general.enableAnimations) {
+                element.style.outline = '3px solid #4a90d9';
+                element.style.backgroundColor = 'rgba(74, 144, 217, 0.1)';
+                setTimeout(function() {
+                    element.style.outline = '';
+                    element.style.backgroundColor = '';
+                }, 3000);
+            }
         }
     }
 
     function restoreScrollPosition() {
         if (userHasScrolled) return;
         const s = getSettings();
-        const bhv = s.general.smoothScroll ? 'smooth' : 'auto';
+        const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
 
         try {
             var pendingRaw = localStorage.getItem('lor_pending_scroll_target');
@@ -1273,7 +1290,11 @@
         const pid = getPageIdentifier(), sp = getSavedPages(), idx = sp.findIndex(p => p.url === pid);
         if (idx !== -1) {
             currentPageSaved = true; const spPos = sp[idx].scrollPosition;
-            if (!sessionStorage.getItem('scroll_restored_' + pid) && spPos > 0) { setTimeout(() => { window.scrollTo({ top: spPos, behavior: 'smooth' }); sessionStorage.setItem('scroll_restored_' + pid, 'true'); const cc = getCommentCount(), cs = window.pageYOffset || document.documentElement.scrollTop; sp[idx].commentCount = cc; sp[idx].scrollPosition = cs; sp[idx].lastChecked = new Date().toISOString(); saveSavedPages(sp); }, 1500); }
+            if (!sessionStorage.getItem('scroll_restored_' + pid) && spPos > 0) {
+                const s = getSettings();
+                const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
+                setTimeout(() => { window.scrollTo({ top: spPos, behavior: bhv }); sessionStorage.setItem('scroll_restored_' + pid, 'true'); const cc = getCommentCount(), cs = window.pageYOffset || document.documentElement.scrollTop; sp[idx].commentCount = cc; sp[idx].scrollPosition = cs; sp[idx].lastChecked = new Date().toISOString(); saveSavedPages(sp); }, 1500);
+            }
             else if (sessionStorage.getItem('scroll_restored_' + pid)) { const cc = getCommentCount(), cs = window.pageYOffset || document.documentElement.scrollTop; sp[idx].commentCount = cc; sp[idx].scrollPosition = cs; sp[idx].lastChecked = new Date().toISOString(); saveSavedPages(sp); }
         } else { currentPageSaved = false; }
     }
@@ -1404,7 +1425,6 @@
                 restoreScrollPosition();
             }
         }, 2000);
-        setTimeout(scrollToLastMod, 1000);
         setTimeout(updateSavedData, 1500);
         setTimeout(makeReplyNicksClickable, 2000);
     });
@@ -1465,146 +1485,101 @@
         }
     });
 
-    document.addEventListener('click', function(e) {
-        var link = e.target.closest('a');
-        if (!link) return;
-        var href = link.href;
-        if (!href) return;
+    function highlightButton(btnId) {
+        const btns = document.querySelectorAll('.lor-panel-container .lor-panel-' + btnId);
+        btns.forEach(btn => {
+            btn.style.transition = 'background 0.3s';
+            btn.style.background = '#4CAF50';
+            setTimeout(() => { btn.style.background = ''; }, 1000);
+        });
+    }
 
-        if (!href.includes('linux.org.ru')) return;
+    function flashSavedBtn(text, color) {
+        const btns = document.querySelectorAll('.lor-panel-container .lor-panel-saved, .lor-mobile-collapsed .lor-panel-saved');
+        btns.forEach(btn => {
+            const orig = btn.textContent;
+            btn.textContent = text;
+            btn.style.transition = 'background 0.3s';
+            btn.style.background = color;
+            setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 1000);
+        });
+    }
 
-        var match = href.match(/[?&]cid=(\d+)/);
-        if (!match) {
-            match = href.match(/[?&]lastmod=(\d+)/);
+    function scrollToLastMod() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const lastmod = urlParams.get('lastmod');
+        if (lastmod) {
+            const s = getSettings();
+            const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
+            const element = document.getElementById('comment-' + lastmod);
+            if (element) {
+                element.scrollIntoView({ behavior: bhv, block: 'center' });
+                element.style.outline = '3px solid #4a90d9';
+                setTimeout(() => { element.style.outline = ''; }, 3000);
+            }
         }
-        if (!match) return;
+    }
 
-        var commentId = match[1];
-        var linkUrl = new URL(href);
-        var topicPath = linkUrl.pathname;
-
-        var pending = {
-            topicPath: topicPath,
-            commentId: commentId,
-            timestamp: Date.now()
-        };
-        try {
-            localStorage.setItem('lor_pending_scroll_target', JSON.stringify(pending));
-        } catch(e) {}
-
-        try {
-            var positions = getScrollPositions();
-            positions[topicPath] = {
-                commentId: commentId.startsWith('topic-') ? commentId : 'comment-' + commentId,
-                scrollOffset: 0,
-                timestamp: Date.now(),
-                title: ''
-            };
-            saveScrollPositions(positions);
-        } catch(e) {}
-    }, true);
-
-    // === СОРТИРОВКА ТАБЛИЦ НА СТРАНИЦЕ ===
     function addTableSorting() {
         const tables = document.querySelectorAll('table');
         tables.forEach((tbl) => {
             if (tbl.dataset.lorSortReady) return;
             tbl.dataset.lorSortReady = '1';
-
             if (!tbl.rows || tbl.rows.length < 2) return;
             const firstCell = tbl.rows[0].cells[0]?.textContent.trim();
             if (!firstCell || firstCell === '') return;
-
             const originalOrder = [];
             for (let i = 1; i < tbl.rows.length; i++) {
                 const row = tbl.rows[i];
-                originalOrder.push({
-                    row: row,
-                    parent: row.parentNode,
-                    next: row.nextSibling
-                });
+                originalOrder.push({ row: row, parent: row.parentNode, next: row.nextSibling });
             }
-
             let currentSort = { col: null, direction: null };
-
             function getColumnType(col) {
                 let hasTime = false, hasNumeric = true, total = 0;
                 for (let i = 1; i < tbl.rows.length; i++) {
                     const raw = tbl.rows[i].cells[col]?.textContent.trim() || '';
                     if (raw === '' || raw === '-' || raw === '—') continue;
                     total++;
-                    if (/(?:минут|час|день|дня|дней|недел|месяц|год|минуту|час назад|сегодня|вчера)/i.test(raw)) {
-                        hasTime = true;
-                    }
-                    if (!/^[+-]?\d+$/.test(raw.replace(/[\s\u00A0]/g, ''))) {
-                        hasNumeric = false;
-                    }
+                    if (/(?:минут|час|день|дня|дней|недел|месяц|год|минуту|час назад|сегодня|вчера)/i.test(raw)) hasTime = true;
+                    if (!/^[+-]?\d+$/.test(raw.replace(/[\s\u00A0]/g, ''))) hasNumeric = false;
                 }
                 if (hasTime) return 'time';
                 if (hasNumeric && total > 0) return 'numeric';
                 return 'text';
             }
-
             function parseRelativeTime(str) {
                 const now = Date.now();
                 const val = str.toLowerCase();
-
                 if (val.includes('минуту назад')) return now - 60 * 1000;
-
                 let m = val.match(/(\d+)\s*минут/);
                 if (m) return now - parseInt(m[1]) * 60 * 1000;
-
                 m = val.match(/(\d+)\s*час/);
                 if (m) return now - parseInt(m[1]) * 3600 * 1000;
-
                 m = val.match(/(\d+)\s*д(?:ень|ня|ней)/);
                 if (m) return now - parseInt(m[1]) * 86400 * 1000;
-
                 m = val.match(/сегодня\s+(\d{1,2}):(\d{2})/);
-                if (m) {
-                    const d = new Date();
-                    d.setHours(parseInt(m[1]), parseInt(m[2]), 0, 0);
-                    return d.getTime();
-                }
-
+                if (m) { const d = new Date(); d.setHours(parseInt(m[1]), parseInt(m[2]), 0, 0); return d.getTime(); }
                 m = val.match(/вчера\s+(\d{1,2}):(\d{2})/);
-                if (m) {
-                    const d = new Date();
-                    d.setDate(d.getDate() - 1);
-                    d.setHours(parseInt(m[1]), parseInt(m[2]), 0, 0);
-                    return d.getTime();
-                }
-
+                if (m) { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(parseInt(m[1]), parseInt(m[2]), 0, 0); return d.getTime(); }
                 m = val.match(/(\d{2})\.(\d{2})\.(\d{2,4})/);
-                if (m) {
-                    const year = m[3].length === 2 ? 2000 + parseInt(m[3]) : parseInt(m[3]);
-                    return new Date(year, parseInt(m[2]) - 1, parseInt(m[1])).getTime();
-                }
-
+                if (m) { const year = m[3].length === 2 ? 2000 + parseInt(m[3]) : parseInt(m[3]); return new Date(year, parseInt(m[2]) - 1, parseInt(m[1])).getTime(); }
                 return 0;
             }
-
             function getSortValue(col, row) {
                 const raw = (row.cells[col]?.textContent || '').trim().replace(/[\s\u00A0]/g, '');
                 if (raw === '' || raw === '-' || raw === '—') return { empty: true };
                 return { empty: false, raw: raw };
             }
-
             function doSort(col, direction) {
                 const colType = getColumnType(col);
                 const dataRows = [];
-                for (let i = 1; i < tbl.rows.length; i++) {
-                    dataRows.push(tbl.rows[i]);
-                }
-
+                for (let i = 1; i < tbl.rows.length; i++) dataRows.push(tbl.rows[i]);
                 dataRows.sort((a, b) => {
                     const aVal = getSortValue(col, a);
                     const bVal = getSortValue(col, b);
-
                     if (aVal.empty && bVal.empty) return 0;
                     if (aVal.empty) return 1;
                     if (bVal.empty) return -1;
-
                     if (colType === 'numeric') {
                         const aNum = parseInt(aVal.raw) || 0;
                         const bNum = parseInt(bVal.raw) || 0;
@@ -1618,67 +1593,40 @@
                         return direction === 'asc' ? cmp : -cmp;
                     }
                 });
-
-                dataRows.forEach(row => {
-                    row.parentNode.appendChild(row);
-                });
+                dataRows.forEach(row => { row.parentNode.appendChild(row); });
             }
-
             function updateHeaders() {
                 Array.from(tbl.rows[0].cells).forEach((cell, i) => {
                     cell.classList.remove('lor-sort-asc', 'lor-sort-desc');
-                    if (currentSort.col === i && currentSort.direction) {
-                        cell.classList.add(currentSort.direction === 'asc' ? 'lor-sort-asc' : 'lor-sort-desc');
-                    }
+                    if (currentSort.col === i && currentSort.direction) cell.classList.add(currentSort.direction === 'asc' ? 'lor-sort-asc' : 'lor-sort-desc');
                 });
             }
-
             function resetSort() {
                 currentSort = { col: null, direction: null };
                 const tbodyMap = new Map();
                 originalOrder.forEach(item => {
-                    if (!tbodyMap.has(item.parent)) {
-                        tbodyMap.set(item.parent, []);
-                    }
+                    if (!tbodyMap.has(item.parent)) tbodyMap.set(item.parent, []);
                     tbodyMap.get(item.parent).push(item);
                 });
                 tbodyMap.forEach((items, tbody) => {
-                    while (tbody.firstChild) {
-                        tbody.removeChild(tbody.firstChild);
-                    }
-                    items.forEach(item => {
-                        tbody.appendChild(item.row);
-                    });
+                    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+                    items.forEach(item => tbody.appendChild(item.row));
                 });
                 updateHeaders();
             }
-
             if (!document.getElementById('lor-sort-styles')) {
                 const style = document.createElement('style');
                 style.id = 'lor-sort-styles';
-                style.textContent = `
-                    .lor-sortable-header { cursor: pointer; user-select: none; }
-                    .lor-sortable-header:hover { text-decoration: underline; }
-                    .lor-sort-asc::after { content: " ▲"; font-size: 0.8em; }
-                    .lor-sort-desc::after { content: " ▼"; font-size: 0.8em; }
-                `;
+                style.textContent = `.lor-sortable-header { cursor: pointer; user-select: none; }.lor-sortable-header:hover { text-decoration: underline; }.lor-sort-asc::after { content: " ▲"; font-size: 0.8em; }.lor-sort-desc::after { content: " ▼"; font-size: 0.8em; }`;
                 document.head.appendChild(style);
             }
-
             Array.from(tbl.rows[0].cells).forEach((cell, i) => {
                 cell.classList.add('lor-sortable-header');
                 cell.addEventListener('click', () => {
                     if (currentSort.col === i) {
-                        if (currentSort.direction === 'asc') {
-                            currentSort.direction = 'desc';
-                        } else {
-                            resetSort();
-                            return;
-                        }
-                    } else {
-                        currentSort.col = i;
-                        currentSort.direction = 'asc';
-                    }
+                        if (currentSort.direction === 'asc') currentSort.direction = 'desc';
+                        else { resetSort(); return; }
+                    } else { currentSort.col = i; currentSort.direction = 'asc'; }
                     doSort(currentSort.col, currentSort.direction);
                     updateHeaders();
                 });
@@ -1688,65 +1636,28 @@
 
     setTimeout(addTableSorting, 500);
 
-    // === ПРЕВЬЮ КОММЕНТАРИЕВ ПО ДОЛГОМУ КЛИКУ ===
     function initCommentPreview() {
         const settings = getSettings();
         const modalScale = settings.general.modalScale / 100;
         const isDark = isDarkTheme();
         const SWIPE_THRESHOLD = 50;
         const SWIPE_MAX_VERTICAL = 30;
-
         if (!document.getElementById('lor-preview-styles')) {
             const style = document.createElement('style');
             style.id = 'lor-preview-styles';
             style.textContent = `
-                .lor-comment-preview {
-                    position: fixed; z-index: 100001;
-                    background: ${isDark ? '#0a0a14' : '#ffffff'};
-                    color: ${isDark ? '#ccc' : '#333'};
-                    border: 1px solid ${isDark ? '#333' : '#ccc'};
-                    border-radius: ${Math.round(8 * modalScale)}px;
-                    padding: ${Math.round(16 * modalScale)}px;
-                    max-width: ${Math.round(600 * modalScale)}px;
-                    max-height: ${Math.round(400 * modalScale)}px;
-                    overflow-y: auto;
-                    font-family: Arial, sans-serif;
-                    font-size: ${Math.round(14 * modalScale)}px;
-                    box-shadow: 0 ${Math.round(4 * modalScale)}px ${Math.round(20 * modalScale)}px rgba(0,0,0,${isDark ? '0.8' : '0.2'});
-                }
-                .lor-comment-preview .preview-header {
-                    color: #4a90d9; font-weight: bold;
-                    margin-bottom: ${Math.round(8 * modalScale)}px;
-                    padding-bottom: ${Math.round(8 * modalScale)}px;
-                    border-bottom: 1px solid ${isDark ? '#333' : '#ccc'};
-                    font-size: ${Math.round(15 * modalScale)}px;
-                }
+                .lor-comment-preview { position: fixed; z-index: 100001; background: ${isDark ? '#0a0a14' : '#ffffff'}; color: ${isDark ? '#ccc' : '#333'}; border: 1px solid ${isDark ? '#333' : '#ccc'}; border-radius: ${Math.round(8 * modalScale)}px; padding: ${Math.round(16 * modalScale)}px; max-width: ${Math.round(600 * modalScale)}px; max-height: ${Math.round(400 * modalScale)}px; overflow-y: auto; font-family: Arial, sans-serif; font-size: ${Math.round(14 * modalScale)}px; box-shadow: 0 ${Math.round(4 * modalScale)}px ${Math.round(20 * modalScale)}px rgba(0,0,0,${isDark ? '0.8' : '0.2'}); }
+                .lor-comment-preview .preview-header { color: #4a90d9; font-weight: bold; margin-bottom: ${Math.round(8 * modalScale)}px; padding-bottom: ${Math.round(8 * modalScale)}px; border-bottom: 1px solid ${isDark ? '#333' : '#ccc'}; font-size: ${Math.round(15 * modalScale)}px; }
                 .lor-comment-preview .preview-body { line-height: 1.6; word-wrap: break-word; overflow-wrap: break-word; }
                 .lor-comment-preview .preview-body img { max-width: 100%; height: auto; }
-                .lor-comment-preview .preview-body pre,
-                .lor-comment-preview .preview-body code {
-                    max-width: 100%; overflow-x: auto; white-space: pre-wrap; word-break: break-all;
-                }
-                .lor-comment-preview .preview-loading {
-                    text-align: center; padding: ${Math.round(20 * modalScale)}px;
-                    color: ${isDark ? '#666' : '#999'};
-                }
-                .lor-comment-preview .preview-body blockquote {
-                    border-left: 3px solid ${isDark ? '#333' : '#ddd'};
-                    margin: ${Math.round(8 * modalScale)}px 0;
-                    padding: ${Math.round(4 * modalScale)}px ${Math.round(12 * modalScale)}px;
-                    color: ${isDark ? '#aaa' : '#666'};
-                }
+                .lor-comment-preview .preview-body pre, .lor-comment-preview .preview-body code { max-width: 100%; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+                .lor-comment-preview .preview-loading { text-align: center; padding: ${Math.round(20 * modalScale)}px; color: ${isDark ? '#666' : '#999'}; }
+                .lor-comment-preview .preview-body blockquote { border-left: 3px solid ${isDark ? '#333' : '#ddd'}; margin: ${Math.round(8 * modalScale)}px 0; padding: ${Math.round(4 * modalScale)}px ${Math.round(12 * modalScale)}px; color: ${isDark ? '#aaa' : '#666'}; }
                 .lor-comment-preview .preview-body a { color: #4a90d9; pointer-events: none; text-decoration: none; }
             `;
             document.head.appendChild(style);
         }
-
-        function removePreview() {
-            const old = document.querySelector('.lor-comment-preview');
-            if (old) old.remove();
-        }
-
+        function removePreview() { const old = document.querySelector('.lor-comment-preview'); if (old) old.remove(); }
         function showPreview(commentUrl, x, y) {
             removePreview();
             const preview = document.createElement('div');
@@ -1755,82 +1666,49 @@
             preview.style.left = Math.min(x, window.innerWidth - Math.round(620 * modalScale)) + 'px';
             preview.style.top = Math.min(y, window.innerHeight - Math.round(420 * modalScale)) + 'px';
             document.body.appendChild(preview);
-
             const cid = new URL(commentUrl).searchParams.get('cid');
-            fetch(commentUrl)
-                .then(r => r.text())
-                .then(html => {
-                    const doc = new DOMParser().parseFromString(html, 'text/html');
-                    let commentEl = doc.getElementById('comment-' + cid) || doc.getElementById(cid);
-                    if (!commentEl) {
-                        doc.querySelectorAll('article.msg').forEach(a => {
-                            if (a.id === 'comment-' + cid || a.id === cid) commentEl = a;
-                        });
-                    }
-                    if (commentEl) {
-                        const author = commentEl.querySelector('a[href*="/people/"]')?.textContent.trim() || 'Аноним';
-                        const bodyEl = commentEl.querySelector('.msg_body');
-                        const clone = bodyEl ? bodyEl.cloneNode(true) : commentEl.cloneNode(true);
-                        clone.querySelectorAll('.reply').forEach(el => el.remove());
-                        clone.querySelectorAll('.btn-group').forEach(el => el.remove());
-                        let body = clone.innerHTML;
-                        body = body.replace(/<a\s+[^>]*onclick="[^"]*"[^>]*>/gi, '<a>');
-                        body = body.replace(/<a[^>]*>\s*(?:Ответить|Реакции|Уведомить\s+модераторов|Ссылка|Править|Удалить|Восстановить|Отклонить|Показать\s+ответы?)\s*<\/a>/gi, '');
-                        body = body.replace(/<li>\s*<\/li>/gi, '');
-                        body = body.replace(/\s*\|\s*/g, ' ');
-                        body = body.replace(/<span[^>]*class="[^"]*paragraph[^"]*"[^>]*>.*?<\/span>/gi, '');
-                        body = body.replace(/¶/g, '');
-                        body = body.trim();
-                        const isDeleted = body.includes('Сообщение удалено') || body.includes('комментарий удален');
-                        preview.innerHTML = `
-                            <div class="preview-header">💬 ${author}</div>
-                            <div class="preview-body">${isDeleted ? '<em style="color:#666">Сообщение удалено</em>' : body}</div>
-                        `;
-                    } else {
-                        preview.innerHTML = '<div class="preview-loading">Комментарий не найден</div>';
-                    }
-                })
-                .catch(() => {
-                    preview.innerHTML = '<div class="preview-loading">Ошибка загрузки</div>';
-                });
+            fetch(commentUrl).then(r => r.text()).then(html => {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                let commentEl = doc.getElementById('comment-' + cid) || doc.getElementById(cid);
+                if (!commentEl) doc.querySelectorAll('article.msg').forEach(a => { if (a.id === 'comment-' + cid || a.id === cid) commentEl = a; });
+                if (commentEl) {
+                    const author = commentEl.querySelector('a[href*="/people/"]')?.textContent.trim() || 'Аноним';
+                    const bodyEl = commentEl.querySelector('.msg_body');
+                    const clone = bodyEl ? bodyEl.cloneNode(true) : commentEl.cloneNode(true);
+                    clone.querySelectorAll('.reply').forEach(el => el.remove());
+                    clone.querySelectorAll('.btn-group').forEach(el => el.remove());
+                    let body = clone.innerHTML;
+                    body = body.replace(/<a\s+[^>]*onclick="[^"]*"[^>]*>/gi, '<a>');
+                    body = body.replace(/<a[^>]*>\s*(?:Ответить|Реакции|Уведомить\s+модераторов|Ссылка|Править|Удалить|Восстановить|Отклонить|Показать\s+ответы?)\s*<\/a>/gi, '');
+                    body = body.replace(/<li>\s*<\/li>/gi, '');
+                    body = body.replace(/\s*\|\s*/g, ' ');
+                    body = body.replace(/<span[^>]*class="[^"]*paragraph[^"]*"[^>]*>.*?<\/span>/gi, '');
+                    body = body.replace(/¶/g, '');
+                    body = body.trim();
+                    const isDeleted = body.includes('Сообщение удалено') || body.includes('комментарий удален');
+                    preview.innerHTML = `<div class="preview-header">💬 ${author}</div><div class="preview-body">${isDeleted ? '<em style="color:#666">Сообщение удалено</em>' : body}</div>`;
+                } else preview.innerHTML = '<div class="preview-loading">Комментарий не найден</div>';
+            }).catch(() => { preview.innerHTML = '<div class="preview-loading">Ошибка загрузки</div>'; });
         }
-
         function initSwipeOnLink(link) {
             if (link.dataset.lorSwipe) return;
             link.dataset.lorSwipe = '1';
-
             let mouseTimer = null, mouseBlocked = false, mouseSX = 0, mouseSY = 0;
-
             link.addEventListener('mousedown', function(e) {
                 if (e.button !== 0) return;
                 mouseBlocked = false;
                 mouseSX = e.clientX;
                 mouseSY = e.clientY;
-                mouseTimer = setTimeout(() => {
-                    mouseBlocked = true;
-                    showPreview(link.href, mouseSX, mouseSY);
-                }, 500);
+                mouseTimer = setTimeout(() => { mouseBlocked = true; showPreview(link.href, mouseSX, mouseSY); }, 500);
             });
-
             link.addEventListener('mousemove', function(e) {
-                if (mouseTimer && (Math.abs(e.clientX - mouseSX) > 5 || Math.abs(e.clientY - mouseSY) > 5)) {
-                    clearTimeout(mouseTimer);
-                    mouseTimer = null;
-                }
+                if (mouseTimer && (Math.abs(e.clientX - mouseSX) > 5 || Math.abs(e.clientY - mouseSY) > 5)) { clearTimeout(mouseTimer); mouseTimer = null; }
             });
-
             link.addEventListener('mouseup', function(e) {
-                if (mouseBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setTimeout(() => { mouseBlocked = false; }, 100);
-                }
-                clearTimeout(mouseTimer);
-                mouseTimer = null;
+                if (mouseBlocked) { e.preventDefault(); e.stopPropagation(); setTimeout(() => { mouseBlocked = false; }, 100); }
+                clearTimeout(mouseTimer); mouseTimer = null;
             });
-
             let touchStartX = 0, touchStartY = 0, touchSwiped = false, touchBlocked = false;
-
             link.addEventListener('touchstart', function(e) {
                 if (e.touches.length !== 1) return;
                 touchStartX = e.touches[0].clientX;
@@ -1838,75 +1716,38 @@
                 touchSwiped = false;
                 touchBlocked = false;
             }, { passive: true });
-
             link.addEventListener('touchmove', function(e) {
                 if (e.touches.length !== 1 || touchSwiped) return;
                 const dx = e.touches[0].clientX - touchStartX;
                 const dy = Math.abs(e.touches[0].clientY - touchStartY);
-                if (dx > SWIPE_THRESHOLD && dy < SWIPE_MAX_VERTICAL) {
-                    e.preventDefault();
-                    touchSwiped = true;
-                    touchBlocked = true;
-                    showPreview(link.href, touchStartX, touchStartY);
-                }
+                if (dx > SWIPE_THRESHOLD && dy < SWIPE_MAX_VERTICAL) { e.preventDefault(); touchSwiped = true; touchBlocked = true; showPreview(link.href, touchStartX, touchStartY); }
             }, { passive: false });
-
             link.addEventListener('touchend', function(e) {
-                if (touchBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setTimeout(() => { touchBlocked = false; }, 100);
-                }
+                if (touchBlocked) { e.preventDefault(); e.stopPropagation(); setTimeout(() => { touchBlocked = false; }, 100); }
                 touchSwiped = false;
             }, { passive: false });
-
-            link.addEventListener('touchcancel', function() {
-                touchSwiped = false;
-                touchBlocked = false;
-                removePreview();
-            });
-
+            link.addEventListener('touchcancel', function() { touchSwiped = false; touchBlocked = false; removePreview(); });
             link.addEventListener('click', function(e) {
-                if (mouseBlocked || touchBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    mouseBlocked = false;
-                    touchBlocked = false;
-                    return false;
-                }
+                if (mouseBlocked || touchBlocked) { e.preventDefault(); e.stopPropagation(); mouseBlocked = false; touchBlocked = false; return false; }
             }, true);
         }
-
         document.querySelectorAll('article.msg div.title').forEach(title => {
             if (!title.textContent.includes('Ответ на:')) return;
             title.querySelectorAll('a[href*="?cid="]').forEach(initSwipeOnLink);
         });
-
-        document.addEventListener('mousedown', function(e) {
-            const preview = document.querySelector('.lor-comment-preview');
-            if (preview && !preview.contains(e.target)) removePreview();
-        });
-
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') removePreview();
-        });
+        document.addEventListener('mousedown', function(e) { const preview = document.querySelector('.lor-comment-preview'); if (preview && !preview.contains(e.target)) removePreview(); });
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') removePreview(); });
     }
-
     setTimeout(initCommentPreview, 800);
-
-    const previewObserver = new MutationObserver(() => {
-        setTimeout(initCommentPreview, 300);
-    });
+    const previewObserver = new MutationObserver(() => { setTimeout(initCommentPreview, 300); });
     previewObserver.observe(document.body, { childList: true, subtree: true });
 
-    // === ПРЕВЬЮ УВЕДОМЛЕНИЙ ПО ДОЛГОМУ КЛИКУ ===
     function initNotificationPreview() {
         const settings = getSettings();
         const modalScale = settings.general.modalScale / 100;
         const isDark = isDarkTheme();
         const SWIPE_THRESHOLD = 50;
         const SWIPE_MAX_VERTICAL = 30;
-
         function showPreview(notificationUrl, x, y, notificationRow) {
             const old = document.querySelector('.lor-comment-preview');
             if (old) old.remove();
@@ -1915,15 +1756,11 @@
             preview.innerHTML = `<div style="text-align:center;padding:${Math.round(20 * modalScale)}px;color:${isDark ? '#666' : '#999'};">Загрузка...</div>`;
             preview.style.cssText = `position:fixed;z-index:100002;background:${isDark?'#0a0a14':'#fff'};color:${isDark?'#ccc':'#333'};border:1px solid ${isDark?'#333':'#ccc'};border-radius:${Math.round(8*modalScale)}px;padding:${Math.round(16*modalScale)}px;max-width:${Math.round(600*modalScale)}px;max-height:${Math.round(400*modalScale)}px;overflow-y:auto;font-family:Arial,sans-serif;font-size:${Math.round(14*modalScale)}px;box-shadow:0 ${Math.round(4*modalScale)}px ${Math.round(20*modalScale)}px rgba(0,0,0,${isDark?0.8:0.2});left:${Math.min(x,window.innerWidth-Math.round(620*modalScale))}px;top:${Math.min(y,window.innerHeight-Math.round(420*modalScale))}px;`;
             document.body.appendChild(preview);
-
             fetch(notificationUrl).then(r => r.text().then(html => ({html, finalUrl: r.url}))).then(({html, finalUrl}) => {
                 const doc = new DOMParser().parseFromString(html, 'text/html');
                 const originalUrl = new URL(notificationUrl);
                 let targetId = originalUrl.searchParams.get('cid');
-                if (!targetId) {
-                    const hashMatch = finalUrl.match(/#comment-(\d+)/);
-                    if (hashMatch) targetId = hashMatch[1];
-                }
+                if (!targetId) { const hashMatch = finalUrl.match(/#comment-(\d+)/); if (hashMatch) targetId = hashMatch[1]; }
                 if (!targetId) targetId = new URL(finalUrl).searchParams.get('lastmod');
                 let commentEl = null;
                 if (targetId) {
@@ -1943,57 +1780,30 @@
                     const isDeleted = body.includes('Сообщение удалено') || body.includes('комментарий удален');
                     preview.innerHTML = `<div style="color:#4a90d9;font-weight:bold;margin-bottom:${Math.round(8*modalScale)}px;padding-bottom:${Math.round(8*modalScale)}px;border-bottom:1px solid ${isDark?'#333':'#ccc'};font-size:${Math.round(15*modalScale)}px;">💬 ${author}</div><div style="line-height:1.6;">${isDeleted?'<em style="color:#666">Сообщение удалено</em>':body}</div>`;
                     if (notificationRow) { notificationRow.style.opacity = '0.5'; notificationRow.style.transition = 'opacity 0.3s'; }
-                } else {
-                    preview.innerHTML = `<div style="text-align:center;padding:${Math.round(20*modalScale)}px;color:${isDark?'#666':'#999'};">Комментарий не найден</div>`;
-                }
-            }).catch(() => {
-                preview.innerHTML = `<div style="text-align:center;padding:${Math.round(20*modalScale)}px;color:${isDark?'#666':'#999'};">Ошибка загрузки</div>`;
-            });
+                } else preview.innerHTML = `<div style="text-align:center;padding:${Math.round(20*modalScale)}px;color:${isDark?'#666':'#999'};">Комментарий не найден</div>`;
+            }).catch(() => { preview.innerHTML = `<div style="text-align:center;padding:${Math.round(20*modalScale)}px;color:${isDark?'#666':'#999'};">Ошибка загрузки</div>`; });
         }
-
-        function removePreview() {
-            const p = document.querySelector('.lor-comment-preview');
-            if (p) p.remove();
-        }
-
+        function removePreview() { const p = document.querySelector('.lor-comment-preview'); if (p) p.remove(); }
         function initSwipeOnElement(el, getUrl) {
             if (el.dataset.lorNotifSwipe) return;
             el.dataset.lorNotifSwipe = '1';
-
             let mouseTimer = null, mouseBlocked = false, mouseSX = 0, mouseSY = 0, mouseRow = null;
-
             el.addEventListener('mousedown', function(e) {
                 if (e.button !== 0) return;
                 mouseBlocked = false;
                 mouseSX = e.clientX;
                 mouseSY = e.clientY;
                 mouseRow = el.closest('[data-notif-url]');
-                mouseTimer = setTimeout(() => {
-                    mouseBlocked = true;
-                    const url = typeof getUrl === 'function' ? getUrl(el) : el.getAttribute('data-notif-url') || el.href;
-                    showPreview(url, mouseSX, mouseSY, mouseRow);
-                }, 500);
+                mouseTimer = setTimeout(() => { mouseBlocked = true; const url = typeof getUrl === 'function' ? getUrl(el) : el.getAttribute('data-notif-url') || el.href; showPreview(url, mouseSX, mouseSY, mouseRow); }, 500);
             });
-
             el.addEventListener('mousemove', function(e) {
-                if (mouseTimer && (Math.abs(e.clientX - mouseSX) > 5 || Math.abs(e.clientY - mouseSY) > 5)) {
-                    clearTimeout(mouseTimer);
-                    mouseTimer = null;
-                }
+                if (mouseTimer && (Math.abs(e.clientX - mouseSX) > 5 || Math.abs(e.clientY - mouseSY) > 5)) { clearTimeout(mouseTimer); mouseTimer = null; }
             });
-
             el.addEventListener('mouseup', function(e) {
-                if (mouseBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setTimeout(() => { mouseBlocked = false; }, 100);
-                }
-                clearTimeout(mouseTimer);
-                mouseTimer = null;
+                if (mouseBlocked) { e.preventDefault(); e.stopPropagation(); setTimeout(() => { mouseBlocked = false; }, 100); }
+                clearTimeout(mouseTimer); mouseTimer = null;
             });
-
             let touchStartX = 0, touchStartY = 0, touchSwiped = false, touchBlocked = false, touchRow = null;
-
             el.addEventListener('touchstart', function(e) {
                 if (e.touches.length !== 1) return;
                 touchStartX = e.touches[0].clientX;
@@ -2002,68 +1812,30 @@
                 touchBlocked = false;
                 touchRow = el.closest('[data-notif-url]');
             }, { passive: true });
-
             el.addEventListener('touchmove', function(e) {
                 if (e.touches.length !== 1 || touchSwiped) return;
                 const dx = e.touches[0].clientX - touchStartX;
                 const dy = Math.abs(e.touches[0].clientY - touchStartY);
-                if (dx > SWIPE_THRESHOLD && dy < SWIPE_MAX_VERTICAL) {
-                    e.preventDefault();
-                    touchSwiped = true;
-                    touchBlocked = true;
-                    const url = typeof getUrl === 'function' ? getUrl(el) : el.getAttribute('data-notif-url') || el.href;
-                    showPreview(url, touchStartX, touchStartY, touchRow);
-                }
+                if (dx > SWIPE_THRESHOLD && dy < SWIPE_MAX_VERTICAL) { e.preventDefault(); touchSwiped = true; touchBlocked = true; const url = typeof getUrl === 'function' ? getUrl(el) : el.getAttribute('data-notif-url') || el.href; showPreview(url, touchStartX, touchStartY, touchRow); }
             }, { passive: false });
-
             el.addEventListener('touchend', function(e) {
-                if (touchBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setTimeout(() => { touchBlocked = false; }, 100);
-                }
+                if (touchBlocked) { e.preventDefault(); e.stopPropagation(); setTimeout(() => { touchBlocked = false; }, 100); }
                 touchSwiped = false;
             }, { passive: false });
-
-            el.addEventListener('touchcancel', function() {
-                touchSwiped = false;
-                touchBlocked = false;
-                removePreview();
-            });
-
+            el.addEventListener('touchcancel', function() { touchSwiped = false; touchBlocked = false; removePreview(); });
             el.addEventListener('click', function(e) {
-                if (mouseBlocked || touchBlocked) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    mouseBlocked = false;
-                    touchBlocked = false;
-                    return false;
-                }
+                if (mouseBlocked || touchBlocked) { e.preventDefault(); e.stopPropagation(); mouseBlocked = false; touchBlocked = false; return false; }
             }, true);
         }
-
-        document.addEventListener('mousedown', function(e) {
-            const preview = document.querySelector('.lor-comment-preview');
-            if (preview && !preview.contains(e.target)) removePreview();
-        });
-
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') removePreview();
-        });
-
+        document.addEventListener('mousedown', function(e) { const preview = document.querySelector('.lor-comment-preview'); if (preview && !preview.contains(e.target)) removePreview(); });
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') removePreview(); });
         const observer = new MutationObserver(() => {
             document.querySelectorAll('[data-notif-url]').forEach(row => initSwipeOnElement(row, el => el.getAttribute('data-notif-url')));
-            document.querySelectorAll('table.message-table a[href*="cid="], table.message-table a[href*="lastmod="]').forEach(link => {
-                initSwipeOnElement(link, el => el.href);
-            });
+            document.querySelectorAll('table.message-table a[href*="cid="], table.message-table a[href*="lastmod="]').forEach(link => initSwipeOnElement(link, el => el.href));
         });
         observer.observe(document.body, { childList: true, subtree: true });
-
         document.querySelectorAll('[data-notif-url]').forEach(row => initSwipeOnElement(row, el => el.getAttribute('data-notif-url')));
-        document.querySelectorAll('table.message-table a[href*="cid="], table.message-table a[href*="lastmod="]').forEach(link => {
-            initSwipeOnElement(link, el => el.href);
-        });
+        document.querySelectorAll('table.message-table a[href*="cid="], table.message-table a[href*="lastmod="]').forEach(link => initSwipeOnElement(link, el => el.href));
     }
-
     initNotificationPreview();
 })();
