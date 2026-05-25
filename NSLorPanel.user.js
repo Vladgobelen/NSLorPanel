@@ -1380,4 +1380,84 @@
             localStorage.setItem('lor_pending_scroll_target', JSON.stringify(pending));
         } catch(e) {}
     }, true);
+
+    // === СОРТИРОВКА ТАБЛИЦ НА СТРАНИЦЕ ===
+    function addTableSorting() {
+        const tables = document.querySelectorAll('table');
+        tables.forEach((tbl) => {
+            // Пропускаем уже обработанные таблицы
+            if (tbl.dataset.lorSortReady) return;
+            tbl.dataset.lorSortReady = '1';
+
+            if (!tbl.rows || tbl.rows.length < 2) return;
+            const firstCell = tbl.rows[0].cells[0]?.textContent.trim();
+            if (!firstCell || firstCell === '') return;
+
+            const originalOrder = Array.from(tbl.rows).slice(1);
+            let currentSort = { col: null, direction: null };
+
+            function doSort(col, direction) {
+                const dataRows = Array.from(tbl.rows).slice(1);
+                dataRows.sort((a, b) => {
+                    const aVal = (a.cells[col]?.textContent || '').trim().toLowerCase();
+                    const bVal = (b.cells[col]?.textContent || '').trim().toLowerCase();
+                    if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+                    if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+                    return 0;
+                });
+                dataRows.forEach(row => tbl.appendChild(row));
+            }
+
+            function updateHeaders() {
+                Array.from(tbl.rows[0].cells).forEach((cell, i) => {
+                    cell.classList.remove('sort-asc', 'sort-desc');
+                    if (currentSort.col === i && currentSort.direction) {
+                        cell.classList.add(currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+                    }
+                });
+            }
+
+            function resetSort() {
+                currentSort = { col: null, direction: null };
+                originalOrder.forEach(row => tbl.appendChild(row));
+                updateHeaders();
+            }
+
+            // Стили (добавляем один раз)
+            if (!document.getElementById('lor-sort-styles')) {
+                const style = document.createElement('style');
+                style.id = 'lor-sort-styles';
+                style.textContent = `
+                    .sortable-header { cursor: pointer; user-select: none; }
+                    .sortable-header:hover { color: #4a90d9; }
+                    .sort-asc::after { content: " ▲"; font-size: 0.8em; }
+                    .sort-desc::after { content: " ▼"; font-size: 0.8em; }
+                `;
+                document.head.appendChild(style);
+            }
+
+            Array.from(tbl.rows[0].cells).forEach((cell, i) => {
+                cell.classList.add('sortable-header');
+                cell.addEventListener('click', () => {
+                    if (currentSort.col === i) {
+                        if (currentSort.direction === 'asc') {
+                            currentSort.direction = 'desc';
+                        } else {
+                            resetSort();
+                            return;
+                        }
+                    } else {
+                        currentSort.col = i;
+                        currentSort.direction = 'asc';
+                    }
+                    doSort(currentSort.col, currentSort.direction);
+                    updateHeaders();
+                });
+            });
+        });
+    }
+
+    // Запускаем один раз при загрузке
+    setTimeout(addTableSorting, 500);
+
 })();
