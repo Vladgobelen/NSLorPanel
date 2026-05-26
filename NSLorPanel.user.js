@@ -427,23 +427,22 @@
         const addBtn = createActionBtn('Добавить', 'primary', modalScale, isDark); addBtn.id = 'lor-visits-add';
         const refreshBtn = createActionBtn('Обновить все', 'primary', modalScale, isDark); refreshBtn.id = 'lor-visits-refresh';
         const closeBtn = createActionBtn('Закрыть', 'cancel', modalScale, isDark); closeBtn.id = 'lor-visits-close';
-        const content = document.createElement('div'); content.style.cssText = 'display:flex;flex-direction:column;height:100%;';
-        content.innerHTML = `<div style="font-size:${Math.round(16 * modalScale)}px;font-weight:bold;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid ${isDark ? '#333' : '#ccc'};flex-shrink:0;">🕐 Отслеживание пользователей</div>`;
-        const inpDiv = document.createElement('div'); inpDiv.style.cssText = 'margin-bottom:12px;flex-shrink:0;'; inpDiv.appendChild(input); content.appendChild(inpDiv);
-        const btnsDiv = document.createElement('div'); btnsDiv.style.cssText = 'display:flex;gap:8px;margin-bottom:16px;flex-shrink:0;'; btnsDiv.appendChild(addBtn); btnsDiv.appendChild(refreshBtn); content.appendChild(btnsDiv);
-        const headerDiv = document.createElement('div'); headerDiv.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 8px;background:' + (isDark ? '#1a1a2e' : '#f0f4f8') + ';border-radius:4px;flex-shrink:0;';
+        const content = document.createElement('div');
+        content.innerHTML = `<div style="font-size:${Math.round(16 * modalScale)}px;font-weight:bold;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid ${isDark ? '#333' : '#ccc'};">🕐 Отслеживание пользователей</div>`;
+        const inpDiv = document.createElement('div'); inpDiv.style.cssText = 'margin-bottom:12px;'; inpDiv.appendChild(input); content.appendChild(inpDiv);
+        const btnsDiv = document.createElement('div'); btnsDiv.style.cssText = 'display:flex;gap:8px;margin-bottom:16px;'; btnsDiv.appendChild(addBtn); btnsDiv.appendChild(refreshBtn); content.appendChild(btnsDiv);
+        const headerDiv = document.createElement('div'); headerDiv.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 8px;background:' + (isDark ? '#1a1a2e' : '#f0f4f8') + ';border-radius:4px;';
         const nickChip = document.createElement('span'); nickChip.textContent = 'Ник ▲'; nickChip.style.cssText = 'cursor:pointer;font-weight:bold;color:#4a90d9;font-size:' + Math.round(12 * modalScale) + 'px;padding:2px 8px;border:1px solid #4a90d9;border-radius:3px;';
         const timeChip = document.createElement('span'); timeChip.textContent = 'Время ▼'; timeChip.style.cssText = 'cursor:pointer;font-weight:bold;color:#4a90d9;font-size:' + Math.round(12 * modalScale) + 'px;padding:2px 8px;border:1px solid #4a90d9;border-radius:3px;';
         let nickSortDir = 1, timeSortDir = -1, activeSort = 'time';
         nickChip.onclick = function() { activeSort = 'nick'; nickSortDir *= -1; nickChip.textContent = 'Ник ' + (nickSortDir > 0 ? '▲' : '▼'); timeChip.style.opacity = '0.6'; nickChip.style.opacity = '1'; render(); };
         timeChip.onclick = function() { activeSort = 'time'; timeSortDir *= -1; timeChip.textContent = 'Время ' + (timeSortDir > 0 ? '▲' : '▼'); nickChip.style.opacity = '0.6'; timeChip.style.opacity = '1'; render(); };
         headerDiv.appendChild(nickChip); headerDiv.appendChild(timeChip);
-        const lbl = document.createElement('div'); lbl.style.cssText = `font-size:${Math.round(13 * modalScale)}px;color:${isDark ? '#888' : '#666'};margin-bottom:6px;flex-shrink:0;`; lbl.textContent = 'Отслеживаемые пользователи:'; content.appendChild(lbl);
+        const lbl = document.createElement('div'); lbl.style.cssText = `font-size:${Math.round(13 * modalScale)}px;color:${isDark ? '#888' : '#666'};margin-bottom:6px;`; lbl.textContent = 'Отслеживаемые пользователи:'; content.appendChild(lbl);
         content.appendChild(headerDiv);
-        const listContainer = document.createElement('div'); listContainer.style.cssText = 'flex:1;overflow-y:auto;min-height:0;margin-bottom:16px;'; listContainer.appendChild(listEl); content.appendChild(listContainer);
-        const closeDiv = document.createElement('div'); closeDiv.style.cssText = 'text-align:right;flex-shrink:0;'; closeDiv.appendChild(closeBtn); content.appendChild(closeDiv);
+        content.appendChild(listEl);
+        const closeDiv = document.createElement('div'); closeDiv.style.cssText = 'text-align:right;margin-top:16px;'; closeDiv.appendChild(closeBtn); content.appendChild(closeDiv);
         const modal = createModal('Отслеживание пользователей', 600, content, 99999, 'lor-visits-overlay');
-        modal.content.style.overflowY = 'hidden';
         function removeUser(nick) { const tracked = getTrackedUsers(); delete tracked[nick]; saveTrackedUsers(tracked); render(); }
         function render() {
             const tracked = getTrackedUsers(); let nicks = Object.keys(tracked);
