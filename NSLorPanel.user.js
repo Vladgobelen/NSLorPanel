@@ -1,13 +1,16 @@
 // ==UserScript==
 // @name         NSLorPanel
 // @namespace    test
+// @version      5.3.1
 // @match        https://www.linux.org.ru/*
 // @grant        none
 // @inject-into  content
 // @run-at       document-idle
 // ==/UserScript==
+
 (function() {
     'use strict';
+
     const THEME_COLORS = {
         black: { btnBg: '#1a1a2e', btnBgHover: '#16213e', btnColor: '#c8c8c8', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#444444' },
         tango: { isDark: true, txt: '#aaa', bg: '#333', border: '#666', btn: '#333', btnH: '#16213e', sep: '#666', panelBg: '#222' },
@@ -17,9 +20,11 @@
         waltz: { btnBg: '#ececec', btnBgHover: '#d8d8d8', btnColor: '#333333', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#cccccc' },
         zomg_ponies: { btnBg: '#ececec', btnBgHover: '#d8d8d8', btnColor: '#333333', notifBg: '#cc0000', notifBgHover: '#ff0000', borderColor: '#cccccc' }
     };
+
     const POSITIONS = ['right', 'left', 'top', 'bottom'];
     const POS_LABELS = { right: 'Справа', left: 'Слева', top: 'Сверху', bottom: 'Снизу' };
     const ICONS = ['🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','🔶','🔷','🔸','🔹','🟥','🟧','🟨','🟩','🟦','🟪','⬛','⬜','🟫','❤️','❓','💚','🇦','🇧','🇨','🇩','🇪','🇫','🇬','🇭','🇮','🇯','🇰','🇱','🇲','🇳','🇴','🇵','🇶','🇷','🇸','🇹','🇺','🇻','🇼','🇽','🇾','🇿'];
+
     const BUTTON_DEFS = {
         up: { text: '▲', title: 'Наверх', action: () => { const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto'; window.scrollTo({ top: 0, behavior: bhv }); }, showSettings: true },
         forum: { text: '📋', title: 'Форум', action: (e) => { if (!e || e.button === 0) location.href = 'https://www.linux.org.ru/forum/'; }, longPressAction: 'forum' },
@@ -32,10 +37,13 @@
         visits: { text: '🕐', title: 'Посещения', action: showVisitsModal, longPressAction: 'visits' },
         down: { text: '▼', title: 'Вниз', action: () => { const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto'; window.scrollTo({ top: document.body.scrollHeight, behavior: bhv }); }, showSettings: true },
         help: { text: '❓', title: 'Справка', action: showHelpModal },
-        toggleCode: { text: '</>', title: 'Развернуть/Свернуть весь код', action: toggleAllCodeBlocks }
+        toggleCode: { text: '</>', title: 'Развернуть/Свернуть весь код', action: toggleAllCodeBlocks },
+        settings: { text: '⚙', title: 'Настройки', action: showSettingsModal }
     };
+
     let trackerTableUpdated = false;
     const panelContainers = { right: null, left: null, top: null, bottom: null };
+    let notifIntervalId = null;
     let settingsBtn = null;
     let addCustomBtn = null;
     const allButtons = {};
@@ -52,15 +60,15 @@
     let userHasScrolled = false;
     let userScrollTimeout = null;
     let scrollPositionRestored = false;
+
     window.addEventListener('scroll', function() {
         userHasScrolled = true;
         clearTimeout(userScrollTimeout);
-        userScrollTimeout = setTimeout(function() {
-            userHasScrolled = false;
-        }, 2000);
+        userScrollTimeout = setTimeout(function() { userHasScrolled = false; }, 2000);
         clearTimeout(scrollTimer);
         scrollTimer = setTimeout(saveScrollPosition, 2000);
     }, { passive: true });
+
     function getCurrentTheme() {
         const links = document.querySelectorAll('link[rel="stylesheet"]');
         for (let i = 0; i < links.length; i++) {
@@ -69,21 +77,26 @@
         }
         return 'black';
     }
+
     function getThemeColors() {
         const theme = getCurrentTheme();
         return THEME_COLORS[theme] || THEME_COLORS['black'];
     }
+
     function getColor(key) {
         const c = getThemeColors();
         return c[key] || '';
     }
+
     function isDarkTheme() {
         const t = getCurrentTheme();
         return t === 'black' || t === 'tango';
     }
+
     function getScale(settings, force) {
         return (force || (settings.general.mobileView ? settings.general.mobileScale : settings.general.scale)) / 100;
     }
+
     function getDefaultSettings() {
         return {
             general: { showBorder: false, scale: 100, modalScale: 100, mobileView: false, mobileScale: 120, orientation: 'vertical', smoothScroll: true, enableAnimations: true },
@@ -101,12 +114,14 @@
                 visits: { right: true, left: false, top: false, bottom: false },
                 down: { right: true, left: false, top: false, bottom: false },
                 help: { right: false, left: true, top: false, bottom: false },
-                toggleCode: { right: false, left: false, top: false, bottom: false }
+                toggleCode: { right: false, left: false, top: false, bottom: false },
+                settings: { right: true, left: false, top: false, bottom: false }
             },
             customButtons: [],
-            buttonOrder: ['up','forum','tracker','toggleCode','notifications','saved','myComment','mention','blacklist','visits','down','help']
+            buttonOrder: ['up','forum','tracker','toggleCode','notifications','saved','myComment','mention','blacklist','visits','down','help','settings']
         };
     }
+
     function getSettings() {
         try {
             const saved = JSON.parse(localStorage.getItem('lor_panel_settings_v3'));
@@ -141,6 +156,7 @@
         } catch(e) {}
         return getDefaultSettings();
     }
+
     function saveSettings(s) { localStorage.setItem('lor_panel_settings_v3', JSON.stringify(s)); }
     function getBlacklist() { try { return JSON.parse(localStorage.getItem('lor_blacklist') || '[]'); } catch(e) { return []; } }
     function saveBlacklistAndNotify(list) { localStorage.setItem('lor_blacklist', JSON.stringify(list)); window.dispatchEvent(new CustomEvent('lor-blacklist-changed', { detail: { list } })); }
@@ -154,12 +170,12 @@
     function saveTrackerCache(d) { localStorage.setItem('lor_tracker_cache', JSON.stringify(d)); }
     function getScrollPositions() { try { return JSON.parse(localStorage.getItem('lor_scroll_positions') || '{}'); } catch(e) { return {}; } }
     function saveScrollPositions(d) { localStorage.setItem('lor_scroll_positions', JSON.stringify(d)); }
+
     function getProfilePageNick() {
-        if (!/\/people\/[^/]+\/profile\//.test(location.href)) return null;
-        const txt = document.body.innerText;
-        const m = txt.match(/Nick:\s*([a-zA-Zа-яА-ЯёЁ0-9_-]+)/i);
+        const m = location.pathname.match(/^\/people\/([^/]+)\/profile\/?$/);
         return m ? m[1] : null;
     }
+
     function getMyNick() {
         let pl = document.querySelector('a[href*="/people/"][href*="/profile"]');
         if (pl) return pl.textContent.trim();
@@ -167,6 +183,7 @@
         if (own) { const l = own.querySelector('a[href*="/people/"]'); if (l) return l.textContent.trim(); }
         return null;
     }
+
     function getCurrentNewsAuthor() {
         let sign = document.querySelector('.sign a[href*="/people/"]');
         if (sign) return sign.textContent.trim();
@@ -176,16 +193,20 @@
         if (authorEl) return authorEl.textContent.trim();
         return null;
     }
+
     function getProfileUrl() {
         const pl = document.querySelector('a[href*="/people/"][href*="/profile"]');
         return pl ? pl.href : 'https://www.linux.org.ru/people/';
     }
+
     function getPageIdentifier() {
         return window.location.href.replace(/[?](lastmod|page|cid)[&](lastmod|page|cid)=\d+/g, '');
     }
+
     function getCommentCount() { return document.querySelectorAll('article.msg').length; }
     function isTrackerPage() { return location.href.match(/\/tracker\/?$/) !== null; }
     function sanitizeClassNick(nick) { return nick.replace(/[^a-zA-Z0-9]/g, '_'); }
+
     function createButton(text, title, cb, mb, fscale) {
         const settings = getSettings(), colors = getThemeColors();
         const scale = getScale(settings, fscale);
@@ -208,6 +229,7 @@
         btn.addEventListener('click', function(e) { if (btn._cmjf || btn._lptr) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); return false; } if (cb) cb(e); }, true);
         return btn;
     }
+
     function createListRow(modalScale, isDark) {
         const row = document.createElement('div');
         row.style.cssText = `padding:${Math.round(12 * modalScale)}px;border-radius:${Math.round(4 * modalScale)}px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border:1px solid ${isDark ? '#2a2a3a' : '#e0e0e0'};transition:background 0.2s;`;
@@ -215,11 +237,13 @@
         row.onmouseleave = function() { this.style.background = ''; };
         return row;
     }
+
     function createInput(ph, modalScale, isDark) {
         const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = ph;
         inp.style.cssText = `width:100%;padding:8px 10px;background:${isDark ? '#111' : '#f5f5f5'};color:${isDark ? '#ccc' : '#333'};border:1px solid ${isDark ? '#444' : '#ccc'};border-radius:4px;font-size:${Math.round(14 * modalScale)}px;box-sizing:border-box;`;
         return inp;
     }
+
     function createActionBtn(text, type, modalScale, isDark) {
         const btn = document.createElement('button'); btn.textContent = text;
         const styles = { primary: { bg: '#0a3d6b', color: '#ddd', border: '#1a5a9a' }, danger: { bg: '#5a1a1a', color: '#ddd', border: '#8a2a2a' }, cancel: { bg: isDark ? '#2a2a3a' : '#e0e0e0', color: isDark ? '#aaa' : '#666', border: isDark ? '#444' : '#ccc' } };
@@ -227,15 +251,22 @@
         btn.style.cssText = `padding:8px 20px;background:${s.bg};color:${s.color};border:1px solid ${s.border};border-radius:4px;cursor:pointer;font-size:${Math.round(13 * modalScale)}px;`;
         return btn;
     }
+
     function cleanupPanels() {
+        if (notifIntervalId !== null) {
+            clearInterval(notifIntervalId);
+            notifIntervalId = null;
+        }
         POSITIONS.forEach(pos => {
             if (panelContainers[pos]) { panelContainers[pos].remove(); panelContainers[pos] = null; }
             if (mobileCollapsedContainers[pos]) { mobileCollapsedContainers[pos].remove(); mobileCollapsedContainers[pos] = null; }
             if (mobileExpandedContainers[pos]) { mobileExpandedContainers[pos].remove(); mobileExpandedContainers[pos] = null; }
             isMobilePanelExpanded[pos] = false;
         });
-        settingsBtn = null; addCustomBtn = null;
+        settingsBtn = null;
+        addCustomBtn = null;
     }
+
     function getOrderedButtons(settings) {
         const order = settings.buttonOrder || [], customIds = settings.customButtons.map(cb => cb.id), result = [];
         order.forEach(id => {
@@ -251,6 +282,7 @@
         customIds.forEach(id => { if (result.indexOf(id) === -1) result.push(id); });
         return result;
     }
+
     function addBtnToPanel(container, btnId, pos, settings, scale) {
         const isCustom = btnId.startsWith('custom_'), custom = isCustom ? settings.customButtons.find(cb => cb.id === btnId) : null;
         if (isCustom && !custom) return;
@@ -268,6 +300,7 @@
                 else if (btnId === 'saved') addCurrentPageToSaved();
                 else if (btnId === 'blacklist') confirmAndAddToBlacklist();
                 else if (btnId === 'visits') confirmAndAddToTracked();
+                else if (btnId === 'settings') showSettingsModal();
             });
             if (def.showSettings) btn.style.position = 'relative';
         }
@@ -275,12 +308,14 @@
         if (btnId === 'notifications') updateNotificationBadge(btn);
         return btn;
     }
+
     function updateNotificationBadge(btn) {
         const ce = document.getElementById('main_events_count'), raw = ce ? ce.textContent : '(0)', count = parseInt(raw.replace(/[^0-9]/g, '')) || 0;
         btn.textContent = count > 0 ? count : '🔔';
         const settings = getSettings(), scale = getScale(settings), fs = Math.round(24 * scale);
         btn.style.fontSize = count > 0 ? Math.round(28 * scale) + 'px' : fs + 'px'; btn.style.fontWeight = 'bold';
     }
+
     function addDesktopPanel() {
         const settings = getSettings(), colors = getThemeColors(), scale = settings.general.scale / 100;
         const gap = Math.round(8 * scale), padding = Math.round(8 * scale);
@@ -288,7 +323,8 @@
         const ordered = getOrderedButtons(settings);
         const profCfg = settings.buttons['profile'] || { right: true, left: false, top: false, bottom: false };
         settings.buttons['profile'] = profCfg;
-        let profPos = 'right'; POSITIONS.forEach(pos => { if (profCfg[pos]) profPos = pos; });
+        let profPos = 'right';
+        POSITIONS.forEach(pos => { if (profCfg[pos]) profPos = pos; });
         const positions = {
             right: { top: '120px', transform: 'none', left: 'auto', right: '5px', bottom: 'auto', dir: 'column' },
             left:  { top: '120px', transform: 'none', left: '5px', right: 'auto', bottom: 'auto', dir: 'column' },
@@ -296,79 +332,183 @@
             bottom:{ top: 'auto', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: '20px', dir: 'row' }
         };
         POSITIONS.forEach(pos => {
-            let hasBtns = false; ordered.forEach(id => { if (id === 'profile') return; const cfg = settings.buttons[id]; if (cfg && typeof cfg === 'object' && cfg[pos]) hasBtns = true; });
-            const hasProf = (pos === profPos); if (!hasBtns && !hasProf) return;
+            let hasBtns = false;
+            ordered.forEach(id => {
+                if (id === 'profile') return;
+                const cfg = settings.buttons[id];
+                if (cfg && typeof cfg === 'object' && cfg[pos]) hasBtns = true;
+            });
+            const hasProf = (pos === profPos);
+            if (!hasBtns && !hasProf) return;
             const ps = positions[pos], container = document.createElement('div');
             container.className = 'lor-panel-container lor-panel-' + pos;
             container.style.cssText = `position:fixed !important;z-index:9999 !important;display:flex !important;gap:${gap}px !important;top:${ps.top};transform:${ps.transform};left:${ps.left};right:${ps.right};bottom:${ps.bottom};flex-direction:${ps.dir};`;
-            if (settings.general.showBorder) { container.style.border = '1px solid ' + colors.borderColor; container.style.borderRadius = '12px'; container.style.padding = padding + 'px'; }
+            if (settings.general.showBorder) {
+                container.style.border = '1px solid ' + colors.borderColor;
+                container.style.borderRadius = '12px';
+                container.style.padding = padding + 'px';
+            }
             if (hasProf) {
-                const profBtn = createButton('👤', 'Профиль', null, true, settings.general.scale); profBtn.style.position = 'relative';
+                const profBtn = createButton('👤', 'Профиль', null, true, settings.general.scale);
+                profBtn.style.position = 'relative';
                 profBtn.onclick = e => { if (profBtn._cmjf) { e.preventDefault(); e.stopPropagation(); return; } location.href = getProfileUrl(); };
                 profBtn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showExtraButtons(profBtn, pos); });
-                container.appendChild(profBtn); allButtons['profile_' + pos] = profBtn;
+                container.appendChild(profBtn);
+                allButtons['profile_' + pos] = profBtn;
             }
-            ordered.forEach(id => { if (id === 'profile') return; const cfg = settings.buttons[id]; if (!cfg || !cfg[pos]) return; addBtnToPanel(container, id, pos, settings, settings.general.scale); });
-            document.body.appendChild(container); panelContainers[pos] = container;
+            ordered.forEach(id => {
+                if (id === 'profile') return;
+                const cfg = settings.buttons[id];
+                if (!cfg || !cfg[pos]) return;
+                addBtnToPanel(container, id, pos, settings, settings.general.scale);
+            });
+            document.body.appendChild(container);
+            panelContainers[pos] = container;
         });
-        if (settings.buttons['notifications']) setInterval(() => { POSITIONS.forEach(pos => { const key = 'notifications_' + pos; if (allButtons[key]) updateNotificationBadge(allButtons[key]); }); }, 5000);
+        if (settings.buttons['notifications']) {
+            notifIntervalId = setInterval(() => {
+                POSITIONS.forEach(pos => {
+                    const key = 'notifications_' + pos;
+                    if (allButtons[key]) updateNotificationBadge(allButtons[key]);
+                });
+            }, 5000);
+        }
         initTrackerPage();
     }
+
     function createMobilePanel() {
         const settings = getSettings(), colors = getThemeColors(), mscale = settings.general.mobileScale / 100;
         const gap = Math.round(8 * mscale), padding = Math.round(8 * mscale);
         cleanupPanels();
-        const ordered = getOrderedButtons(settings);
-        const profCfg = settings.buttons['profile'] || { right: true, left: false, top: false, bottom: false };
-        settings.buttons['profile'] = profCfg;
-        let mainPos = 'right', counts = { right: 0, left: 0, top: 0, bottom: 0 };
-        ordered.forEach(id => { if (id === 'profile') return; const cfg = settings.buttons[id]; if (cfg && typeof cfg === 'object') POSITIONS.forEach(pos => { if (cfg[pos]) counts[pos]++; }); });
-        POSITIONS.forEach(pos => { if (profCfg[pos]) counts[pos]++; });
-        let max = 0; POSITIONS.forEach(pos => { if (counts[pos] > max) { max = counts[pos]; mainPos = pos; } });
-        if (max === 0) { mainPos = 'right'; if (!profCfg.right) { settings.buttons['profile'] = { right: true, left: false, top: false, bottom: false }; saveSettings(settings); } }
-        const collapsed = document.createElement('div'); collapsed.className = 'lor-mobile-collapsed lor-mobile-' + mainPos;
+
+        const collapsedButtons = ['up', 'notifications', 'down'];
+
+        const upCfg = settings.buttons['up'] || { right: true, left: false, top: false, bottom: false };
+        let collapsedPos = 'right';
+        POSITIONS.forEach(pos => { if (upCfg[pos]) collapsedPos = pos; });
+
+        const collapsed = document.createElement('div');
+        collapsed.className = 'lor-mobile-collapsed lor-mobile-' + collapsedPos;
         collapsed.style.cssText = `position:fixed !important;z-index:9999 !important;display:flex !important;gap:${gap}px !important;`;
-        if (settings.general.showBorder) { collapsed.style.border = '1px solid ' + colors.borderColor; collapsed.style.borderRadius = '12px'; collapsed.style.padding = padding + 'px'; }
-        collapsed.style.flexDirection = (mainPos === 'right' || mainPos === 'left') ? 'column' : 'row';
-        const upBtn = createButton('▲', 'Наверх', null, false, settings.general.mobileScale); upBtn.style.position = 'relative';
-        upBtn.onclick = e => { if (upBtn._cmjf) { e.preventDefault(); e.stopPropagation(); return; } const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto'; window.scrollTo({ top: 0, behavior: bhv }); };
-        upBtn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showExtraButtons(upBtn, mainPos); });
-        collapsed.appendChild(upBtn);
-        const notifBtn = createButton('🔔', 'Уведомления', null, false, settings.general.mobileScale);
-        notifBtn.onclick = e => { if (notifBtn._cmjf) { e.preventDefault(); e.stopPropagation(); return; } location.href = 'https://www.linux.org.ru/notifications'; };
-        notifBtn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showNotificationsModal(); });
-        collapsed.appendChild(notifBtn);
-        if (settings.buttons['notifications'] && settings.buttons['notifications'][mainPos]) { updateNotificationBadge(notifBtn); allButtons['notifications_' + mainPos] = notifBtn; }
-        const downBtn = createButton('▼', 'Вниз', null, false, settings.general.mobileScale); downBtn.style.position = 'relative';
-        downBtn.onclick = e => { if (downBtn._cmjf) { e.preventDefault(); e.stopPropagation(); return; } const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto'; window.scrollTo({ top: document.body.scrollHeight, behavior: bhv }); };
-        downBtn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showExtraButtons(downBtn, mainPos); });
-        collapsed.appendChild(downBtn);
-        document.body.appendChild(collapsed); mobileCollapsedContainers[mainPos] = collapsed;
+        if (settings.general.showBorder) {
+            collapsed.style.border = '1px solid ' + colors.borderColor;
+            collapsed.style.borderRadius = '12px';
+            collapsed.style.padding = padding + 'px';
+        }
+        collapsed.style.flexDirection = (collapsedPos === 'right' || collapsedPos === 'left') ? 'column' : 'row';
+
+        collapsedButtons.forEach(btnId => {
+            const def = BUTTON_DEFS[btnId];
+            if (!def) return;
+
+            const btn = createButton(def.text, def.title, null, false, settings.general.mobileScale);
+            btn.style.position = 'relative';
+
+            if (btnId === 'up') {
+                btn.onclick = e => {
+                    if (btn._cmjf) { e.preventDefault(); e.stopPropagation(); return; }
+                    const s = getSettings();
+                    const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
+                    window.scrollTo({ top: 0, behavior: bhv });
+                };
+                btn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showExtraButtons(btn, collapsedPos); });
+            } else if (btnId === 'notifications') {
+                btn.onclick = e => {
+                    if (btn._cmjf) { e.preventDefault(); e.stopPropagation(); return; }
+                    location.href = 'https://www.linux.org.ru/notifications';
+                };
+                btn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showNotificationsModal(); });
+                updateNotificationBadge(btn);
+                allButtons['notifications_mobile'] = btn;
+            } else if (btnId === 'down') {
+                btn.onclick = e => {
+                    if (btn._cmjf) { e.preventDefault(); e.stopPropagation(); return; }
+                    const s = getSettings();
+                    const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
+                    window.scrollTo({ top: document.body.scrollHeight, behavior: bhv });
+                };
+                btn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showExtraButtons(btn, collapsedPos); });
+            }
+
+            collapsed.appendChild(btn);
+            allButtons[btnId + '_mobile'] = btn;
+        });
+
+        document.body.appendChild(collapsed);
+        mobileCollapsedContainers[collapsedPos] = collapsed;
+
         POSITIONS.forEach(pos => {
-            let hasBtns = false; ordered.forEach(id => { if (id === 'profile') return; const cfg = settings.buttons[id]; if (cfg && typeof cfg === 'object' && cfg[pos]) hasBtns = true; });
-            const hasProf = profCfg && typeof profCfg === 'object' && profCfg[pos]; if (!hasBtns && !hasProf) return;
-            const expanded = document.createElement('div'); expanded.className = 'lor-mobile-expanded lor-mobile-' + pos;
+            let hasBtns = false;
+            const ordered = getOrderedButtons(settings);
+            ordered.forEach(id => {
+                if (id === 'profile' || id === 'up' || id === 'notifications' || id === 'down') return;
+                const cfg = settings.buttons[id];
+                if (cfg && typeof cfg === 'object' && cfg[pos]) hasBtns = true;
+            });
+            const profCfg = settings.buttons['profile'];
+            const hasProf = profCfg && typeof profCfg === 'object' && profCfg[pos];
+            if (!hasBtns && !hasProf) return;
+
+            const expanded = document.createElement('div');
+            expanded.className = 'lor-mobile-expanded lor-mobile-' + pos;
             expanded.style.cssText = `position:fixed !important;z-index:9999 !important;display:none !important;gap:${gap}px !important;`;
             expanded.style.flexDirection = (pos === 'right' || pos === 'left') ? 'column' : 'row';
-            if (pos === 'right' || pos === 'left') { expanded.style.maxHeight = '70vh'; expanded.style.overflowY = 'auto'; } else { expanded.style.maxWidth = '90vw'; expanded.style.overflowX = 'auto'; }
-            if (settings.general.showBorder) { expanded.style.border = '1px solid ' + colors.borderColor; expanded.style.borderRadius = '12px'; expanded.style.padding = padding + 'px'; }
-            if (hasProf) { const profBtn = createButton('👤', 'Профиль', null, true, settings.general.mobileScale); profBtn.style.position = 'relative'; profBtn.onclick = e => { if (profBtn._cmjf) { e.preventDefault(); e.stopPropagation(); return; } location.href = getProfileUrl(); }; profBtn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showExtraButtons(profBtn, pos); }); expanded.appendChild(profBtn); allButtons['profile_' + pos] = profBtn; }
-            ordered.forEach(id => { if (id === 'profile') return; const cfg = settings.buttons[id]; if (!cfg || !cfg[pos]) return; addBtnToPanel(expanded, id, pos, settings, settings.general.mobileScale); });
-            document.body.appendChild(expanded); mobileExpandedContainers[pos] = expanded;
+            if (pos === 'right' || pos === 'left') {
+                expanded.style.maxHeight = '70vh';
+                expanded.style.overflowY = 'auto';
+            } else {
+                expanded.style.maxWidth = '90vw';
+                expanded.style.overflowX = 'auto';
+            }
+            if (settings.general.showBorder) {
+                expanded.style.border = '1px solid ' + colors.borderColor;
+                expanded.style.borderRadius = '12px';
+                expanded.style.padding = padding + 'px';
+            }
+
+            if (hasProf) {
+                const profBtn = createButton('👤', 'Профиль', null, true, settings.general.mobileScale);
+                profBtn.style.position = 'relative';
+                profBtn.onclick = e => { if (profBtn._cmjf) { e.preventDefault(); e.stopPropagation(); return; } location.href = getProfileUrl(); };
+                profBtn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showExtraButtons(profBtn, pos); });
+                expanded.appendChild(profBtn);
+                allButtons['profile_' + pos] = profBtn;
+            }
+
+            ordered.forEach(id => {
+                if (id === 'profile' || id === 'up' || id === 'notifications' || id === 'down') return;
+                const cfg = settings.buttons[id];
+                if (!cfg || !cfg[pos]) return;
+                addBtnToPanel(expanded, id, pos, settings, settings.general.mobileScale);
+            });
+
+            document.body.appendChild(expanded);
+            mobileExpandedContainers[pos] = expanded;
         });
+
         positionMobilePanels();
-        if (settings.buttons['notifications']) setInterval(() => { POSITIONS.forEach(pos => { const key = 'notifications_' + pos; if (allButtons[key]) updateNotificationBadge(allButtons[key]); }); }, 5000);
+
+        if (settings.buttons['notifications']) {
+            if (notifIntervalId) clearInterval(notifIntervalId);
+            notifIntervalId = setInterval(() => {
+                const btn = allButtons['notifications_mobile'];
+                if (btn) updateNotificationBadge(btn);
+            }, 5000);
+        }
     }
+
     function positionMobilePanels() {
         const collapsedPos = { right: { top: '25%', transform: 'translateY(-50%)', left: 'auto', right: '0px', bottom: 'auto' }, left: { top: '25%', transform: 'translateY(-50%)', left: '0px', right: 'auto', bottom: 'auto' }, top: { top: '0px', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: 'auto' }, bottom: { top: 'auto', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: '0px' } };
         const expandedPos = { right: { top: '50%', transform: 'translateY(-50%)', left: 'auto', right: '5px', bottom: 'auto' }, left: { top: '50%', transform: 'translateY(-50%)', left: '5px', right: 'auto', bottom: 'auto' }, top: { top: '5px', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: 'auto' }, bottom: { top: 'auto', transform: 'translateX(-50%)', left: '50%', right: 'auto', bottom: '5px' } };
         POSITIONS.forEach(pos => {
             const c = mobileCollapsedContainers[pos], e = mobileExpandedContainers[pos], cp = collapsedPos[pos], ep = expandedPos[pos];
-            if (c) { for (const p in cp) c.style[p] = cp[p]; c.style.background = 'rgba(0,0,0,0.3)'; c.style.backdropFilter = 'blur(5px)'; c.style.webkitBackdropFilter = 'blur(5px)'; }
-            if (e) { for (const p in ep) e.style[p] = ep[p]; e.style.background = 'rgba(0,0,0,0.5)'; e.style.backdropFilter = 'blur(8px)'; e.style.webkitBackdropFilter = 'blur(8px)'; }
+            if (c) { for (const p in cp) c.style[p] = cp[p]; c.style.background = 'transparent'; c.style.backdropFilter = ''; c.style.webkitBackdropFilter = ''; }
+            if (e) { for (const p in ep) e.style[p] = ep[p]; e.style.background = 'transparent'; e.style.backdropFilter = ''; e.style.webkitBackdropFilter = ''; }
         });
     }
+
     function rebuildPanel() { cleanupPanels(); const s = getSettings(); if (s.general.mobileView) createMobilePanel(); else addDesktopPanel(); }
+
     function showBlacklistModal() {
         if (document.getElementById('lor-blacklist-overlay')) return;
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -402,6 +542,7 @@
         removeBtn.onclick = () => { const nick = input.value.trim(); const idx = blacklist.indexOf(nick); if (idx !== -1) { blacklist.splice(idx, 1); saveBlacklistAndNotify(blacklist); render(); input.value = ''; } };
         closeBtn.onclick = modal.close;
     }
+
     function parseLastVisitTime(str) {
         if (!str || str === 'загрузка...' || str === 'ошибка' || str === 'неизвестно') return 0;
         try {
@@ -419,6 +560,7 @@
         } catch(e) {}
         return 0;
     }
+
     function showVisitsModal() {
         if (document.getElementById('lor-visits-overlay')) return;
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -428,7 +570,6 @@
         const refreshBtn = createActionBtn('Обновить все', 'primary', modalScale, isDark); refreshBtn.id = 'lor-visits-refresh';
         const closeBtn = createActionBtn('Закрыть', 'cancel', modalScale, isDark); closeBtn.id = 'lor-visits-close';
         const content = document.createElement('div');
-        content.innerHTML = `<div style="font-size:${Math.round(16 * modalScale)}px;font-weight:bold;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid ${isDark ? '#333' : '#ccc'};">🕐 Отслеживание пользователей</div>`;
         const inpDiv = document.createElement('div'); inpDiv.style.cssText = 'margin-bottom:12px;'; inpDiv.appendChild(input); content.appendChild(inpDiv);
         const btnsDiv = document.createElement('div'); btnsDiv.style.cssText = 'display:flex;gap:8px;margin-bottom:16px;'; btnsDiv.appendChild(addBtn); btnsDiv.appendChild(refreshBtn); content.appendChild(btnsDiv);
         const headerDiv = document.createElement('div'); headerDiv.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 8px;background:' + (isDark ? '#1a1a2e' : '#f0f4f8') + ';border-radius:4px;';
@@ -468,6 +609,7 @@
         input.addEventListener('keydown', e => { if (e.key === 'Enter') addBtn.click(); });
         closeBtn.onclick = modal.close;
     }
+
     function showHelpModal() {
         if (document.getElementById('lor-help-overlay')) return;
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -482,12 +624,13 @@
             { title: '💬 Кнопка "Мои сообщения"', content: '<b>ЛКМ:</b> Прокрутка к вашему последнему комментарию.' },
             { title: '🚫 Кнопка "Чёрный список"', content: '<b>ЛКМ:</b> Управление списком.<br><b>ПКМ на новости:</b> Добавить автора в список.' },
             { title: '🕐 Кнопка "Посещения"', content: '<b>ЛКМ:</b> Список отслеживаемых пользователей.<br><b>ПКМ на новости:</b> Добавить автора в список.' },
-            { title: '⚙ Настройки', content: 'Кнопка настроек появляется при ПКМ на кнопку профиля. Можно настроить масштаб, мобильный вид, отображение кнопок.' },
+            { title: '⚙ Настройки', content: 'Открывает окно настроек панели. Можно настроить масштаб, мобильный вид, отображение кнопок.' },
             { title: '📍 Сохранение позиции', content: 'Панель автоматически запоминает последний видимый комментарий и при следующем входе в тему возвращает вас к месту чтения.' }
         ];
         sections.forEach(sec => { const sd = document.createElement('div'); sd.style.cssText = 'margin-bottom:20px;'; const st = document.createElement('div'); st.textContent = sec.title; st.style.cssText = `font-weight:bold;margin-bottom:6px;color:#4a90d9;font-size:${Math.round(15 * modalScale)}px;`; sd.appendChild(st); const sc = document.createElement('div'); sc.innerHTML = sec.content; sc.style.cssText = `font-size:${Math.round(13 * modalScale)}px;line-height:1.6;padding-left:12px;border-left:2px solid ${isDark ? '#2a2a3a' : '#e0e0e0'};`; sd.appendChild(sc); content.appendChild(sd); });
         createModal('❓ Справка', 600, content, 100010, 'lor-help-overlay');
     }
+
     function createModal(title, width, content, zindex, id, onclose) {
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
         const overlay = document.createElement('div');
@@ -520,6 +663,74 @@
         overlay._closeLorModal = closeFn;
         return { overlay, modal, content: contentDiv, close: closeFn };
     }
+
+    function showButtonSettingsMenu(btnId, btnNames, btnConfig, isProfile, isCustom, customBtn, settings, isDark, modalScale, onApply) {
+        if (document.getElementById('lor-btn-menu-overlay')) return;
+        var posKeys = ['right', 'left', 'top', 'bottom'];
+        var posLabels = ['Справа', 'Слева', 'Сверху', 'Снизу'];
+        var content = document.createElement('div');
+        content.style.cssText = 'overflow-y:auto;flex:1;';
+        var titleText = isProfile ? 'Профиль' : (isCustom && customBtn ? customBtn.icon + ' ' + customBtn.title : (btnNames[btnId] || btnId));
+        var titleEl = document.createElement('div');
+        titleEl.style.cssText = 'font-size:' + Math.round(18 * modalScale) + 'px;font-weight:bold;margin-bottom:16px;color:#4a90d9;';
+        titleEl.textContent = titleText;
+        content.appendChild(titleEl);
+        var lbl = document.createElement('div'); lbl.style.cssText = 'font-size:' + Math.round(14 * modalScale) + 'px;margin-bottom:12px;font-weight:bold;';
+        lbl.textContent = 'Позиция на панели:'; content.appendChild(lbl);
+        posKeys.forEach(function(pos, index) {
+            var lblDiv = document.createElement('label');
+            lblDiv.style.cssText = 'display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:8px;background:' + (isDark ? '#0d0d1a' : '#f9f9f9') + ';border:1px solid ' + (isDark ? '#2a2a3a' : '#e0e0e0') + ';border-radius:6px;cursor:pointer;';
+            var checkbox = document.createElement('input');
+            if (isProfile) { checkbox.type = 'radio'; checkbox.name = 'lor-profile-pos-menu'; }
+            else { checkbox.type = 'checkbox'; checkbox.name = 'lor-btn-pos-' + btnId; }
+            checkbox.value = pos;
+            checkbox.checked = btnConfig[pos] || false;
+            checkbox.style.cssText = 'width:18px;height:18px;accent-color:#4a90d9;';
+            checkbox.onchange = function() {
+                if (isProfile) {
+                    if (this.checked) {
+                        posKeys.forEach(function(p) { btnConfig[p] = false; });
+                        btnConfig[pos] = true;
+                    }
+                } else {
+                    btnConfig[pos] = this.checked;
+                }
+                saveSettings(settings);
+            };
+            lblDiv.appendChild(checkbox);
+            var lblText = document.createElement('span'); lblText.textContent = posLabels[index]; lblText.style.cssText = 'font-size:' + Math.round(15 * modalScale) + 'px;';
+            lblDiv.appendChild(lblText);
+            lblDiv.onclick = function(e) { if (e.target !== checkbox) checkbox.click(); };
+            content.appendChild(lblDiv);
+        });
+        var upDiv = document.createElement('div');
+        upDiv.style.cssText = 'padding:14px 16px;margin-bottom:8px;margin-top:16px;background:' + (isDark ? '#0d0d1a' : '#f9f9f9') + ';border:1px solid ' + (isDark ? '#2a2a3a' : '#e0e0e0') + ';border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;';
+        var upText = document.createElement('span'); upText.textContent = 'Переместить выше'; upText.style.cssText = 'font-size:' + Math.round(15 * modalScale) + 'px;font-weight:bold;';
+        var upIcon = document.createElement('span'); upIcon.textContent = '↑'; upIcon.style.cssText = 'font-size:' + Math.round(20 * modalScale) + 'px;color:#4a90d9;';
+        upDiv.appendChild(upText); upDiv.appendChild(upIcon);
+        upDiv.onclick = function() { moveButtonUp(btnId, settings); saveSettings(settings); modal.close(); onApply(); };
+        content.appendChild(upDiv);
+        if (!isProfile && isCustom) {
+            var delDiv = document.createElement('div');
+            delDiv.style.cssText = 'padding:14px 16px;margin-bottom:8px;background:#5a1a1a;border:1px solid #8a2a2a;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;';
+            var delText = document.createElement('span'); delText.textContent = 'Удалить кнопку'; delText.style.cssText = 'font-size:' + Math.round(15 * modalScale) + 'px;font-weight:bold;color:#ddd;';
+            var delIcon = document.createElement('span'); delIcon.textContent = '✕'; delIcon.style.cssText = 'font-size:' + Math.round(20 * modalScale) + 'px;color:#ddd;';
+            delDiv.appendChild(delText); delDiv.appendChild(delIcon);
+            delDiv.onclick = function() {
+                if (confirm('Удалить кнопку "' + (customBtn ? customBtn.title : btnId) + '"?')) {
+                    settings.customButtons = settings.customButtons.filter(function(cb) { return cb.id !== btnId; });
+                    settings.buttonOrder = settings.buttonOrder.filter(function(id) { return id !== btnId; });
+                    if (settings.buttons.hasOwnProperty(btnId)) delete settings.buttons[btnId];
+                    saveSettings(settings);
+                    modal.close();
+                    onApply();
+                }
+            };
+            content.appendChild(delDiv);
+        }
+        var modal = createModal('Настройки кнопки', 450, content, 100011, 'lor-btn-menu-overlay');
+    }
+
     function showSettingsModal() {
         if (document.getElementById('lor-settings-overlay')) return;
         var settings = getSettings();
@@ -609,7 +820,7 @@
         }
         function renderButtonsTab() {
             content.innerHTML = '';
-            var btnNames = { up: '▲ Наверх', forum: '📋 Форум', tracker: '☰ Трекер', notifications: '🔔 Уведомления', saved: '💾 Сохраненные', myComment: '💬 Мои сообщения', mention: '📢 Упоминания', blacklist: '🚫 Чёрный список', visits: '🕐 Посещения', down: '▼ Вниз', help: '❓ Справка', toggleCode: ' </ > Код' };
+            var btnNames = { up: '▲ Наверх', forum: '📋 Форум', tracker: '☰ Трекер', notifications: '🔔 Уведомления', saved: '💾 Сохраненные', myComment: '💬 Мои сообщения', mention: '📢 Упоминания', blacklist: '🚫 Чёрный список', visits: '🕐 Посещения', down: '▼ Вниз', help: '❓ Справка', toggleCode: ' </ > Код', settings: '⚙ Настройки' };
             var allButtonIds = settings.buttonOrder.slice();
             for (var key in settings.buttons) { if (allButtonIds.indexOf(key) === -1 && key !== 'profile') allButtonIds.push(key); }
             settings.customButtons.forEach(function(cb) { if (allButtonIds.indexOf(cb.id) === -1) allButtonIds.push(cb.id); });
@@ -647,6 +858,64 @@
                 div.appendChild(actionsDiv); content.appendChild(div);
             });
             var hint = document.createElement('div'); hint.style.cssText = 'margin-top:12px;padding:8px;font-size:' + Math.round(11 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';'; hint.innerHTML = 'Отметьте чекбоксами, на каких панелях отображать кнопки.<br>Профиль всегда на одной панели (выберите радиокнопкой).'; content.appendChild(hint);
+        }
+        function renderButtonsTabMobile() {
+            content.innerHTML = '';
+            var btnNames = { up: '▲ Наверх', forum: '📋 Форум', tracker: '☰ Трекер', notifications: '🔔 Уведомления', saved: '💾 Сохраненные', myComment: '💬 Мои сообщения', mention: '📢 Упоминания', blacklist: '🚫 Чёрный список', visits: '🕐 Посещения', down: '▼ Вниз', help: '❓ Справка', toggleCode: '</> Код', settings: '⚙ Настройки' };
+            var allButtonIds = settings.buttonOrder.slice();
+            for (var key in settings.buttons) { if (allButtonIds.indexOf(key) === -1 && key !== 'profile') allButtonIds.push(key); }
+            settings.customButtons.forEach(function(cb) { if (allButtonIds.indexOf(cb.id) === -1) allButtonIds.push(cb.id); });
+            for (var name in btnNames) { if (allButtonIds.indexOf(name) === -1) allButtonIds.push(name); }
+            var list = document.createElement('div');
+            list.style.cssText = 'display:flex;flex-direction:column;gap:' + Math.round(8 * modalScale) + 'px;';
+            var profileConfig = settings.buttons['profile'];
+            if (!profileConfig || typeof profileConfig !== 'object') { profileConfig = { right: true, left: false, top: false, bottom: false }; settings.buttons['profile'] = profileConfig; }
+            var profilePosition = 'right';
+            ['right','left','top','bottom'].forEach(function(pos) { if (profileConfig[pos]) profilePosition = pos; });
+            var profileRow = document.createElement('div');
+            profileRow.style.cssText = 'padding:14px 16px;border-radius:8px;background:' + (isDark ? '#1a1a2e' : '#f0f4f8') + ';border:1px solid #4a90d9;cursor:pointer;display:flex;align-items:center;gap:12px;';
+            var profileIcon = document.createElement('span'); profileIcon.textContent = '👤'; profileIcon.style.cssText = 'font-size:26px;';
+            var profileInfo = document.createElement('div'); profileInfo.style.cssText = 'flex:1;';
+            var profileName = document.createElement('div'); profileName.textContent = 'Профиль'; profileName.style.cssText = 'font-weight:bold;color:#4a90d9;font-size:' + Math.round(15 * modalScale) + 'px;';
+            var profilePos = document.createElement('div'); profilePos.textContent = 'Позиция: ' + POS_LABELS[profilePosition]; profilePos.style.cssText = 'font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';margin-top:2px;';
+            profileInfo.appendChild(profileName); profileInfo.appendChild(profilePos);
+            var profileArrow = document.createElement('span'); profileArrow.textContent = '›'; profileArrow.style.cssText = 'color:' + (isDark ? '#666' : '#999') + ';font-size:24px;';
+            profileRow.appendChild(profileIcon); profileRow.appendChild(profileInfo); profileRow.appendChild(profileArrow);
+            profileRow.onclick = function() { showButtonSettingsMenu('profile', btnNames, profileConfig, true, false, null, settings, isDark, modalScale, function() { renderButtonsTabMobile(); }); };
+            list.appendChild(profileRow);
+            allButtonIds.forEach(function(btnId) {
+                if (btnId === 'profile') return;
+                var isCustom = btnId.startsWith('custom_');
+                var customBtn = null;
+                if (isCustom) { customBtn = settings.customButtons.find(function(cb) { return cb.id === btnId; }); if (!customBtn) return; }
+                else if (!btnNames[btnId]) return;
+                var btnConfig = settings.buttons[btnId];
+                if (!btnConfig || typeof btnConfig !== 'object') { btnConfig = { right: false, left: false, top: false, bottom: false }; settings.buttons[btnId] = btnConfig; }
+                var isActive = btnConfig.right || btnConfig.left || btnConfig.top || btnConfig.bottom;
+                var displayName = isCustom && customBtn ? customBtn.title : (btnNames[btnId] || btnId);
+                var icon = isCustom && customBtn ? customBtn.icon : displayName.split(' ')[0];
+                var positions = [];
+                if (btnConfig.right) positions.push('Справа');
+                if (btnConfig.left) positions.push('Слева');
+                if (btnConfig.top) positions.push('Сверху');
+                if (btnConfig.bottom) positions.push('Снизу');
+                var row = document.createElement('div');
+                row.style.cssText = 'padding:14px 16px;border-radius:8px;background:' + (isDark ? '#0d0d1a' : '#f9f9f9') + ';border:1px solid ' + (isDark ? '#2a2a3a' : '#e0e0e0') + ';cursor:pointer;display:flex;align-items:center;gap:12px;' + (isActive ? '' : 'opacity:0.5;');
+                var iconEl = document.createElement('span'); iconEl.textContent = icon; iconEl.style.cssText = 'font-size:22px;min-width:28px;text-align:center;';
+                var infoEl = document.createElement('div'); infoEl.style.cssText = 'flex:1;';
+                var nameEl = document.createElement('div'); nameEl.textContent = displayName; nameEl.style.cssText = 'font-weight:bold;' + (!isActive ? 'text-decoration:line-through;' : '') + 'font-size:' + Math.round(15 * modalScale) + 'px;';
+                var statusEl = document.createElement('div'); statusEl.textContent = isActive ? positions.join(', ') : 'Скрыта'; statusEl.style.cssText = 'font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isActive ? '#4CAF50' : (isDark ? '#666' : '#999')) + ';margin-top:2px;';
+                infoEl.appendChild(nameEl); infoEl.appendChild(statusEl);
+                var arrowEl = document.createElement('span'); arrowEl.textContent = '›'; arrowEl.style.cssText = 'color:' + (isDark ? '#666' : '#999') + ';font-size:24px;';
+                row.appendChild(iconEl); row.appendChild(infoEl); row.appendChild(arrowEl);
+                row.onclick = function() { showButtonSettingsMenu(btnId, btnNames, btnConfig, false, isCustom, customBtn, settings, isDark, modalScale, function() { renderButtonsTabMobile(); }); };
+                list.appendChild(row);
+            });
+            content.appendChild(list);
+            var hint = document.createElement('div');
+            hint.style.cssText = 'margin-top:16px;padding:10px;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';text-align:center;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';';
+            hint.textContent = 'Нажмите на кнопку для настройки';
+            content.appendChild(hint);
         }
         function renderFilterTab() {
             content.innerHTML = '';
@@ -707,11 +976,11 @@
                 var sectionContent = document.createElement('div'); sectionContent.innerHTML = section.content; sectionContent.style.cssText = 'font-size:' + Math.round(13 * modalScale) + 'px;line-height:1.6;color:' + (isDark ? '#bbb' : '#444') + ';padding-left:' + Math.round(8 * modalScale) + 'px;border-left:2px solid ' + (isDark ? '#2a2a3a' : '#e0e0e0') + ';';
                 sectionDiv.appendChild(sectionContent); content.appendChild(sectionDiv);
             });
-            var footerHelp = document.createElement('div'); footerHelp.style.cssText = 'margin-top:' + Math.round(20 * modalScale) + 'px;padding-top:' + Math.round(12 * modalScale) + 'px;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;'; footerHelp.textContent = 'NSLorPanel v5.0 • Все данные хранятся в localStorage вашего браузера'; content.appendChild(footerHelp);
+            var footerHelp = document.createElement('div'); footerHelp.style.cssText = 'margin-top:' + Math.round(20 * modalScale) + 'px;padding-top:' + Math.round(12 * modalScale) + 'px;border-top:1px solid ' + (isDark ? '#333' : '#ccc') + ';font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#666' : '#999') + ';text-align:center;'; footerHelp.textContent = 'NSLorPanel v5.3.1 • Все данные хранятся в localStorage вашего браузера'; content.appendChild(footerHelp);
         }
         renderGeneralTab();
         tabGeneral.onclick = function() { currentTab = 'general'; tabGeneral.style.borderBottomColor = '#4a90d9'; tabGeneral.style.color = '#4a90d9'; tabGeneral.style.fontWeight = 'bold'; tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal'; tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal'; tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal'; renderGeneralTab(); };
-        tabButtons.onclick = function() { currentTab = 'buttons'; tabButtons.style.borderBottomColor = '#4a90d9'; tabButtons.style.color = '#4a90d9'; tabButtons.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal'; tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal'; renderButtonsTab(); };
+        tabButtons.onclick = function() { currentTab = 'buttons'; tabButtons.style.borderBottomColor = '#4a90d9'; tabButtons.style.color = '#4a90d9'; tabButtons.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal'; tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal'; settings.general.mobileView ? renderButtonsTabMobile() : renderButtonsTab(); };
         tabFilter.onclick = function() { currentTab = 'filter'; tabFilter.style.borderBottomColor = '#4a90d9'; tabFilter.style.color = '#4a90d9'; tabFilter.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal'; tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal'; renderFilterTab(); };
         tabHelp.onclick = function() { currentTab = 'help'; tabHelp.style.borderBottomColor = '#4a90d9'; tabHelp.style.color = '#4a90d9'; tabHelp.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal'; tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal'; renderHelpTab(); };
         saveBtn.onclick = function() {
@@ -739,6 +1008,7 @@
         cancelBtn.onclick = closeSettings;
         overlay.onclick = function(e) { if (e.target === overlay) closeSettings(); };
     }
+
     function showAddCustomModal() {
         if (document.getElementById('lor-add-custom-overlay')) return;
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -760,6 +1030,7 @@
         urlInp.addEventListener('keydown', e => { if (e.key === 'Enter') addCustom(); });
         titleInp.addEventListener('keydown', e => { if (e.key === 'Enter') addCustom(); });
     }
+
     function showSavedPagesModal() {
         if (currentModal) { currentModal.remove(); currentModal = null; }
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme(), sp = getSavedPages();
@@ -789,6 +1060,7 @@
         }
         createModal('Сохраненные страницы', 700, content, 100003);
     }
+
     function showForumModal() {
         if (currentModal) { currentModal.remove(); currentModal = null; }
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -819,6 +1091,7 @@
             content.appendChild(list); saveForumCache(cache); if (hasCh) highlightButton('forum');
         });
     }
+
     function showTrackerModal() {
         if (currentModal) { currentModal.remove(); currentModal = null; }
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -834,6 +1107,7 @@
                 const row = createListRow(modalScale, isDark), curl = tp.url.replace(/[?&]lastmod=\d+/g, ''), cdata = cache[curl], old = (cdata && typeof cdata === 'object') ? cdata.count : (cdata || 0), nw = tp.messageCount, diff = nw - old;
                 ncache[curl] = { count: nw, date: Date.now() };
                 if (diff > 0 && old > 0) { hasCh = true; row.style.background = isDark ? '#1a3a1a' : '#e8f5e8'; row.style.borderColor = '#4CAF50'; }
+                row.setAttribute('data-notif-url', tp.url);
                 const info = document.createElement('div'); info.style.cssText = 'flex:1;';
                 if (tp.group) { const gd = document.createElement('div'); gd.textContent = tp.group; gd.style.cssText = `font-size:${Math.round(11 * modalScale)}px;color:#4a90d9;margin-bottom:${Math.round(4 * modalScale)}px;`; info.appendChild(gd); }
                 const td = document.createElement('div'); td.textContent = tp.title; td.style.cssText = `font-weight:bold;margin-bottom:${Math.round(4 * modalScale)}px;`; info.appendChild(td);
@@ -851,6 +1125,7 @@
             content.appendChild(list); saveTrackerCache(ncache); if (hasCh) highlightButton('tracker');
         });
     }
+
     function showNotificationsModal() {
         if (currentModal) { currentModal.remove(); currentModal = null; }
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
@@ -951,21 +1226,25 @@
                 content.appendChild(list);
             });
     }
+
     function parseForumSections(html) {
         const doc = new DOMParser().parseFromString(html, 'text/html'), sections = [], links = doc.querySelectorAll('a[href*="/forum/"]');
         links.forEach(lnk => { const href = lnk.href; if (href.match(/\/forum\/[^/]+\/$/) && !sections.find(s => s.url === href)) { const par = lnk.closest('li'), txt = par ? par.textContent : lnk.textContent, cm = txt.match(/((\d+)\s+за\s+сутки)/), cnt = cm ? parseInt(cm[1]) : 0; sections.push({ url: href, title: lnk.textContent.trim(), description: par ? (par.querySelector('em') ? par.querySelector('em').textContent : '') : '', dailyCount: cnt }); } });
         return sections;
     }
+
     function parseTrackerTopics(html) {
         const doc = new DOMParser().parseFromString(html, 'text/html'), topics = [], rows = doc.querySelectorAll('table.message-table tbody tr');
         rows.forEach(row => { if (row.querySelector('th')) return; const cells = row.querySelectorAll('td'); if (cells.length >= 4) { const gl = cells[0].querySelector('a'), tl = cells[1].querySelector('a'), ct = cells[3].textContent.trim(), cnt = parseInt(ct) || 0; if (tl) { const tags = []; cells[1].querySelectorAll('.tag').forEach(t => { tags.push(t.textContent.trim()); }); const ft = tl.textContent.trim(), parts = ft.split('\n').map(p => p.trim()).filter(p => p), mt = parts[parts.length - 1] || ft; topics.push({ url: tl.href, title: mt, tags: tags, group: gl ? gl.textContent.trim() : cells[0].textContent.trim(), messageCount: cnt }); } } });
         return topics;
     }
+
     function parseNotifications(html) {
         const doc = new DOMParser().parseFromString(html, 'text/html'), notifs = [], rows = doc.querySelectorAll('table.message-table tbody tr');
         rows.forEach(row => { const lnk = row.querySelector('td:nth-child(2) a'), tm = row.querySelector('time'); if (lnk) { const tags = []; lnk.querySelectorAll('.tag').forEach(t => { tags.push(t.textContent.trim()); }); const ft = row.textContent.trim(), cm = ft.match(/((Новости|Форум|Трекер|Галерея|Статьи))/), cat = cm ? cm[1] : ''; notifs.push({ url: lnk.href, title: lnk.textContent.trim(), tags: tags, category: cat, time: tm ? tm.textContent.trim() : '' }); } });
         return notifs;
     }
+
     function updateTrackerTable() {
         if (trackerTableUpdated) return;
         const table = document.querySelector('table.message-table'); if (!table) return; if (!isTrackerPage()) return;
@@ -977,10 +1256,13 @@
         rows.forEach(row => { if (row.querySelector('th')) return; const cells = row.querySelectorAll('td'); if (cells.length < 4) return; const tl = cells[1].querySelector('a'); if (!tl) return; const curl = tl.href.replace(/[?&]lastmod=\d+/g, ''), cc = parseInt(cells[3].textContent.trim()) || 0; clean[curl] = { count: cc, date: now }; });
         saveTrackerCache(clean); trackerTableUpdated = true; if (hasCh) highlightButton('tracker');
     }
+
     function initTrackerPage() { if (isTrackerPage() && !trackerTableUpdated) { setTimeout(() => { if (document.querySelector('table.message-table tbody tr')) updateTrackerTable(); }, 100); } }
+
     function fetchLastVisit(nick, cb) {
         fetch(new URL('/people/' + nick + '/profile', window.location.origin).href).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(html => { const idx = html.indexOf('Последнее посещение'); if (idx === -1) { if (cb) cb('неизвестно'); return; } const snip = html.substring(idx, idx + 200); const tm = snip.match(/<time[^>]*>([^<]+)<\/time>/); if (tm) { if (cb) cb(tm[1].trim()); return; } const m = html.match(/<b>Последнее посещение:<\/b>\s*<time[^>]*>([^<]+)<\/time>/); if (cb) cb(m ? m[1].trim() : 'неизвестно'); }).catch(err => { console.log('NSLorPanel: ошибка ' + nick + ' - ' + err.message); if (cb) cb('ошибка'); });
     }
+
     function goToMyLastComment() {
         const nick = getMyNick(); if (!nick) { alert('Не удалось определить ник.'); return; }
         const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
@@ -993,6 +1275,7 @@
             }
         } else { alert('Ваших комментариев на этой странице нет.'); }
     }
+
     function goToLastMention() {
         const nick = getMyNick(); if (!nick) { alert('Не удалось определить ник.'); return; }
         const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
@@ -1005,6 +1288,7 @@
             }
         } else { alert('Упоминаний вас на этой странице нет.'); }
     }
+
     function toggleAllCodeBlocks() {
         let anchor = null; let anchorVisualTop = 0;
         const articles = document.querySelectorAll('article.msg');
@@ -1019,6 +1303,7 @@
         });
         requestAnimationFrame(() => { requestAnimationFrame(() => { if (anchor && document.body.contains(anchor)) { const newRect = anchor.getBoundingClientRect(); const delta = newRect.top - anchorVisualTop; window.scrollTo(0, window.scrollY + delta); } }); });
     }
+
     function scrollToComment(commentId) {
         if (!commentId || scrollPositionRestored) return;
         if (userHasScrolled) return;
@@ -1040,6 +1325,7 @@
             }
         }
     }
+
     function restoreScrollPosition() {
         if (userHasScrolled) return;
         const s = getSettings();
@@ -1123,6 +1409,7 @@
             }
         } catch(e) {}
     }
+
     function updateSavedPositionForCurrentUrl(commentId) {
         try {
             var currentPath = window.location.pathname;
@@ -1144,6 +1431,7 @@
             saveScrollPositions(cleaned);
         } catch(e) {}
     }
+
     function saveScrollPosition() {
         if (Date.now() - pageLoadTime < 2000) return;
         if (scrollPositionRestored && Date.now() - pageLoadTime < 5000) return;
@@ -1203,6 +1491,7 @@
             }
         } catch(e) {}
     }
+
     function updateSavedData() {
         const pid = getPageIdentifier(), sp = getSavedPages(), idx = sp.findIndex(p => p.url === pid);
         if (idx !== -1) {
@@ -1215,11 +1504,13 @@
             else if (sessionStorage.getItem('scroll_restored_' + pid)) { const cc = getCommentCount(), cs = window.pageYOffset || document.documentElement.scrollTop; sp[idx].commentCount = cc; sp[idx].scrollPosition = cs; sp[idx].lastChecked = new Date().toISOString(); saveSavedPages(sp); }
         } else { currentPageSaved = false; }
     }
+
     function addCurrentPageToSaved() {
         const pid = getPageIdentifier(), sp = getSavedPages(), idx = sp.findIndex(p => p.url === pid), title = document.title.replace(' - Linux.org.ru', '').trim(), cc = getCommentCount(), cs = window.pageYOffset || document.documentElement.scrollTop;
         if (idx !== -1) { sp[idx].commentCount = cc; sp[idx].scrollPosition = cs; sp[idx].lastChecked = new Date().toISOString(); saveSavedPages(sp); currentPageSaved = true; flashSavedBtn('↻', '#4a90d9'); sessionStorage.removeItem('scroll_restored_' + pid); }
         else { sp.push({ url: pid, title: title, commentCount: cc, scrollPosition: cs, lastChecked: new Date().toISOString() }); saveSavedPages(sp); currentPageSaved = true; flashSavedBtn('✓', '#4CAF50'); }
     }
+
     function confirmAndAddToBlacklist() {
         const author = getProfilePageNick() || getCurrentNewsAuthor();
         if (!author) { alert('Не удалось определить автора.'); return; }
@@ -1228,6 +1519,7 @@
             if (bl.indexOf(author) === -1) { bl.push(author); saveBlacklistAndNotify(bl); alert('Автор "' + author + '" добавлен.'); } else { alert('Автор уже в списке.'); }
         }
     }
+
     function confirmAndAddToTracked() {
         const author = getProfilePageNick() || getCurrentNewsAuthor();
         if (!author) { alert('Не удалось определить автора.'); return; }
@@ -1235,6 +1527,7 @@
         if (tr[author]) { alert('Пользователь "' + author + '" уже отслеживается.'); return; }
         if (confirm('Добавить пользователя "' + author + '" в список отслеживаемых?')) { tr[author] = { lastVisit: 'загрузка...', checked: 0 }; saveTrackedUsers(tr); alert('Пользователь "' + author + '" добавлен.'); }
     }
+
     function showExtraButtons(btn, pos) {
         const colors = getThemeColors(), settings = getSettings(), scale = settings.general.scale / 100, size = Math.round(44 * scale), fs = Math.round(22 * scale);
         if (settingsBtn) { settingsBtn.remove(); settingsBtn = null; } if (addCustomBtn) { addCustomBtn.remove(); addCustomBtn = null; }
@@ -1252,7 +1545,9 @@
         addCustomBtn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); showAddCustomModal(); hideExtraButtons(); });
         btn.appendChild(addCustomBtn);
     }
+
     function hideExtraButtons() { if (settingsBtn) { settingsBtn.style.opacity = '0'; settingsBtn.style.pointerEvents = 'none'; } if (addCustomBtn) { addCustomBtn.style.opacity = '0'; addCustomBtn.style.pointerEvents = 'none'; } }
+
     function moveButtonUp(btnId, settings) {
         const order = settings.buttonOrder || [];
         const idx = order.indexOf(btnId);
@@ -1260,6 +1555,7 @@
         else if (idx === -1) { order.unshift(btnId); }
         settings.buttonOrder = order;
     }
+
     function showVisitTooltip(lnk, nick) {
         hideVisitTooltip();
         const settings = getSettings(), modalScale = settings.general.modalScale / 100;
@@ -1273,7 +1569,9 @@
         window.addEventListener('scroll', sh, { passive: true });
         activeTooltip._sh = sh;
     }
+
     function hideVisitTooltip() { if (activeTooltip) { if (activeTooltip._sh) window.removeEventListener('scroll', activeTooltip._sh); activeTooltip.remove(); activeTooltip = null; } }
+
     function makeReplyNicksClickable() {
         const titles = document.querySelectorAll('article.msg div.title');
         titles.forEach(title => {
@@ -1312,22 +1610,19 @@
             }
         });
     }
+
     document.addEventListener('click', e => { let hide = true; if (settingsBtn && settingsBtn.contains(e.target)) hide = false; if (addCustomBtn && addCustomBtn.contains(e.target)) hide = false; if (hide) hideExtraButtons(); });
+
     window.addEventListener('load', () => {
         pageLoadTime = Date.now();
         restoreScrollPosition();
-        setTimeout(function() {
-            if (!scrollPositionRestored) { restoreScrollPosition(); }
-        }, 500);
-        setTimeout(function() {
-            if (!scrollPositionRestored) { restoreScrollPosition(); }
-        }, 1000);
-        setTimeout(function() {
-            if (!scrollPositionRestored) { restoreScrollPosition(); }
-        }, 2000);
+        setTimeout(function() { if (!scrollPositionRestored) { restoreScrollPosition(); } }, 500);
+        setTimeout(function() { if (!scrollPositionRestored) { restoreScrollPosition(); } }, 1000);
+        setTimeout(function() { if (!scrollPositionRestored) { restoreScrollPosition(); } }, 2000);
         setTimeout(updateSavedData, 1500);
         setTimeout(makeReplyNicksClickable, 2000);
     });
+
     window.addEventListener('resize', () => { const s = getSettings(); if (s.general.mobileView) positionMobilePanels(); });
     window.addEventListener('orientationchange', () => { setTimeout(() => { const s = getSettings(); if (s.general.mobileView) positionMobilePanels(); }, 300); });
     window.addEventListener('storage', function(e) {
@@ -1335,32 +1630,48 @@
             setTimeout(function() { restoreScrollPosition(); }, 500);
         }
     });
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             setTimeout(rebuildPanel, 500);
             setTimeout(updateSavedData, 800);
             setTimeout(makeReplyNicksClickable, 1000);
-            setTimeout(function() {
-                if (!scrollPositionRestored) { restoreScrollPosition(); }
-            }, 1200);
+            setTimeout(function() { if (!scrollPositionRestored) { restoreScrollPosition(); } }, 1200);
         });
     }
     else {
         setTimeout(rebuildPanel, 500);
         setTimeout(updateSavedData, 800);
         setTimeout(makeReplyNicksClickable, 1000);
-        setTimeout(function() {
-            if (!scrollPositionRestored) { restoreScrollPosition(); }
-        }, 1200);
+        setTimeout(function() { if (!scrollPositionRestored) { restoreScrollPosition(); } }, 1200);
     }
+
     let attempts = 0; const interval = setInterval(() => { if (document.body) { clearInterval(interval); rebuildPanel(); updateSavedData(); makeReplyNicksClickable(); } if (++attempts > 20) clearInterval(interval); }, 250);
+
     const domObserver = new MutationObserver(mutations => { let hasNew = false; mutations.forEach(m => { if (m.type === 'childList' && m.addedNodes.length > 0) { for (let i = 0; i < m.addedNodes.length; i++) { const n = m.addedNodes[i]; if (n.nodeType === 1) { if (n.querySelectorAll && n.querySelectorAll('article.msg div.title').length > 0) hasNew = true; if (n.classList && (n.classList.contains('msg') || n.querySelector('.title'))) hasNew = true; } } } }); if (hasNew) setTimeout(makeReplyNicksClickable, 500); });
     domObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
+
     document.addEventListener('touchstart', e => { if (e.touches.length === 1) { touchStartY = e.touches[0].clientY; touchStartX = e.touches[0].clientX; touchMoved = false; const t = e.target; let inPanel = false; POSITIONS.forEach(pos => { if (mobileCollapsedContainers[pos] && mobileCollapsedContainers[pos].contains(t)) inPanel = true; if (mobileExpandedContainers[pos] && mobileExpandedContainers[pos].contains(t)) inPanel = true; }); e.target._tip = inPanel; } }, { passive: true });
     document.addEventListener('touchmove', e => { if (e.touches.length === 1) { const dy = e.touches[0].clientY - touchStartY, dx = e.touches[0].clientX - touchStartX; if (Math.abs(dy) > 10 || Math.abs(dx) > 10) touchMoved = true; if (e.target._tip && Math.abs(dy) > Math.abs(dx)) e.preventDefault(); } }, { passive: false });
     document.addEventListener('touchend', e => { if (!touchMoved) return; const s = getSettings(); if (!s.general.mobileView) { touchMoved = false; return; } const dy = (e.changedTouches[0] ? e.changedTouches[0].clientY : touchStartY) - touchStartY, t = e.target; POSITIONS.forEach(pos => { let inPanel = false; if (mobileCollapsedContainers[pos] && mobileCollapsedContainers[pos].contains(t)) inPanel = true; if (mobileExpandedContainers[pos] && mobileExpandedContainers[pos].contains(t)) inPanel = true; if (inPanel) { if (dy > SWIPE_THRESHOLD) expandMobilePanel(pos); else if (dy < -SWIPE_THRESHOLD) collapseMobilePanel(pos); } }); touchMoved = false; });
-    function expandMobilePanel(pos) { if (isMobilePanelExpanded[pos]) return; isMobilePanelExpanded[pos] = true; if (mobileCollapsedContainers[pos]) mobileCollapsedContainers[pos].style.display = 'none'; if (mobileExpandedContainers[pos]) { mobileExpandedContainers[pos].style.display = 'flex'; mobileExpandedContainers[pos].scrollTop = 0; mobileExpandedContainers[pos].scrollLeft = 0; } }
-    function collapseMobilePanel(pos) { if (!isMobilePanelExpanded[pos]) return; isMobilePanelExpanded[pos] = false; if (mobileExpandedContainers[pos]) mobileExpandedContainers[pos].style.display = 'none'; if (mobileCollapsedContainers[pos]) mobileCollapsedContainers[pos].style.display = 'flex'; }
+
+    function expandMobilePanel(pos) {
+        if (isMobilePanelExpanded[pos]) return;
+        isMobilePanelExpanded[pos] = true;
+        POSITIONS.forEach(p => {
+            if (mobileCollapsedContainers[p]) mobileCollapsedContainers[p].style.display = 'none';
+            if (mobileExpandedContainers[p]) { mobileExpandedContainers[p].style.display = 'flex'; mobileExpandedContainers[p].scrollTop = 0; mobileExpandedContainers[p].scrollLeft = 0; }
+        });
+    }
+    function collapseMobilePanel(pos) {
+        if (!isMobilePanelExpanded[pos]) return;
+        isMobilePanelExpanded[pos] = false;
+        POSITIONS.forEach(p => {
+            if (mobileExpandedContainers[p]) mobileExpandedContainers[p].style.display = 'none';
+            if (mobileCollapsedContainers[p]) mobileCollapsedContainers[p].style.display = 'flex';
+        });
+    }
+
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             const overlays = document.querySelectorAll('.lor-panel-modal-overlay');
@@ -1371,6 +1682,7 @@
             }
         }
     });
+
     function highlightButton(btnId) {
         const btns = document.querySelectorAll('.lor-panel-container .lor-panel-' + btnId);
         btns.forEach(btn => {
@@ -1379,6 +1691,7 @@
             setTimeout(() => { btn.style.background = ''; }, 1000);
         });
     }
+
     function flashSavedBtn(text, color) {
         const btns = document.querySelectorAll('.lor-panel-container .lor-panel-saved, .lor-mobile-collapsed .lor-panel-saved');
         btns.forEach(btn => {
@@ -1389,6 +1702,7 @@
             setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 1000);
         });
     }
+
     function scrollToLastMod() {
         const urlParams = new URLSearchParams(window.location.search);
         const lastmod = urlParams.get('lastmod');
@@ -1405,12 +1719,19 @@
             }
         }
     }
+
     function addTableSorting() {
         const tables = document.querySelectorAll('table');
         tables.forEach((tbl) => {
             if (tbl.dataset.lorSortReady) return;
-            tbl.dataset.lorSortReady = '1';
             if (!tbl.rows || tbl.rows.length < 2) return;
+            const allLinks = tbl.querySelectorAll('a');
+            const navLinks = Array.from(allLinks).filter(a => {
+                const h = a.getAttribute('href') || '';
+                return /^\/(news|tracker|forum|gallery|articles|search|notifications|about|docs)\/?$/i.test(h);
+            });
+            if (navLinks.length >= 4 && tbl.rows.length <= 5) return;
+            tbl.dataset.lorSortReady = '1';
             const firstCell = tbl.rows[0].cells[0]?.textContent.trim();
             if (!firstCell || firstCell === '') return;
             const originalOrder = [];
@@ -1518,7 +1839,9 @@
             });
         });
     }
+
     setTimeout(addTableSorting, 500);
+
     function initCommentPreview() {
         const settings = getSettings();
         const modalScale = settings.general.modalScale / 100;
@@ -1621,9 +1944,12 @@
         document.addEventListener('mousedown', function(e) { const preview = document.querySelector('.lor-comment-preview'); if (preview && !preview.contains(e.target)) removePreview(); });
         document.addEventListener('keydown', function(e) { if (e.key === 'Escape') removePreview(); });
     }
+
     setTimeout(initCommentPreview, 800);
+
     const previewObserver = new MutationObserver(() => { setTimeout(initCommentPreview, 300); });
     previewObserver.observe(document.body, { childList: true, subtree: true });
+
     function initNotificationPreview() {
         const settings = getSettings();
         const modalScale = settings.general.modalScale / 100;
@@ -1719,5 +2045,6 @@
         document.querySelectorAll('[data-notif-url]').forEach(row => initSwipeOnElement(row, el => el.getAttribute('data-notif-url')));
         document.querySelectorAll('table.message-table a[href*="cid="], table.message-table a[href*="lastmod="]').forEach(link => initSwipeOnElement(link, el => el.href));
     }
+
     initNotificationPreview();
 })();
