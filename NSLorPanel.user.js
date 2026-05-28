@@ -204,7 +204,7 @@
     }
 
     function getCommentCount() { return document.querySelectorAll('article.msg').length; }
-    function isTrackerPage() { return location.href.match(/\/tracker\/?$/) !== null; }
+    function isTrackerPage() { return /^\/tracker\/?(\?.*)?$/.test(location.pathname + location.search); }
     function sanitizeClassNick(nick) { return nick.replace(/[^a-zA-Z0-9]/g, '_'); }
 
     function createButton(text, title, cb, mb, fscale) {
@@ -381,6 +381,21 @@
         const gap = Math.round(8 * mscale), padding = Math.round(8 * mscale);
         cleanupPanels();
 
+        if (!document.getElementById('lor-mobile-touch-styles')) {
+            const touchStyle = document.createElement('style');
+            touchStyle.id = 'lor-mobile-touch-styles';
+            touchStyle.textContent = `
+    .lor-mobile-collapsed,
+    .lor-mobile-expanded {
+        touch-action: none !important;
+        overscroll-behavior: contain !important;
+        -webkit-user-select: none !important;
+        user-select: none !important;
+    }
+    `;
+            document.head.appendChild(touchStyle);
+        }
+
         const collapsedButtons = ['up', 'notifications', 'down'];
 
         const upCfg = settings.buttons['up'] || { right: true, left: false, top: false, bottom: false };
@@ -389,7 +404,7 @@
 
         const collapsed = document.createElement('div');
         collapsed.className = 'lor-mobile-collapsed lor-mobile-' + collapsedPos;
-        collapsed.style.cssText = `position:fixed !important;z-index:9999 !important;display:flex !important;gap:${gap}px !important;`;
+        collapsed.style.cssText = `position:fixed !important;z-index:9999 !important;display:flex !important;gap:${gap}px !important;touch-action:none !important;overscroll-behavior:contain !important;-webkit-user-select:none !important;user-select:none !important;`;
         if (settings.general.showBorder) {
             collapsed.style.border = '1px solid ' + colors.borderColor;
             collapsed.style.borderRadius = '12px';
@@ -451,7 +466,7 @@
 
             const expanded = document.createElement('div');
             expanded.className = 'lor-mobile-expanded lor-mobile-' + pos;
-            expanded.style.cssText = `position:fixed !important;z-index:9999 !important;display:none !important;gap:${gap}px !important;`;
+            expanded.style.cssText = `position:fixed !important;z-index:9999 !important;display:none !important;gap:${gap}px !important;touch-action:none !important;overscroll-behavior:contain !important;-webkit-user-select:none !important;user-select:none !important;`;
             expanded.style.flexDirection = (pos === 'right' || pos === 'left') ? 'column' : 'row';
             if (pos === 'right' || pos === 'left') {
                 expanded.style.maxHeight = '70vh';
@@ -1270,18 +1285,111 @@
 
     function updateTrackerTable() {
         if (trackerTableUpdated) return;
-        const table = document.querySelector('table.message-table'); if (!table) return; if (!isTrackerPage()) return;
-        const oldCache = getTrackerCache(); let hasCh = false; const now = Date.now(), oneDay = 24 * 60 * 60 * 1000, clean = {};
-        for (const url in oldCache) { const cd = oldCache[url]; if (cd && typeof cd === 'object') { const age = now - cd.date; if (age <= oneDay) clean[url] = cd; } }
-        const hr = table.querySelector('thead tr'); if (hr && !hr.querySelector('.lor-new-comments-col')) { const th = document.createElement('th'); th.className = 'lor-new-comments-col'; th.textContent = 'Новых'; th.style.cssText = 'text-align:center;color:#4CAF50;'; hr.appendChild(th); }
-        const rows = table.querySelectorAll('tbody tr');
-        rows.forEach(row => { if (row.querySelector('th')) return; const cells = row.querySelectorAll('td'); if (cells.length < 4) return; const tl = cells[1].querySelector('a'); if (!tl) return; const curl = tl.href.replace(/[?&]lastmod=\d+/g, ''), cc = parseInt(cells[3].textContent.trim()) || 0, cdata = clean[curl], was = cdata && typeof cdata === 'object', old = was ? cdata.count : 0, diff = cc - old, ec = row.querySelector('.lor-new-comments-col'); if (ec) ec.remove(); const td = document.createElement('td'); td.className = 'lor-new-comments-col'; td.style.cssText = 'text-align:center;font-weight:bold;'; if (!was) { td.textContent = cc; td.style.color = '#4a90d9'; td.title = 'Новая тема (всего: ' + cc + ')'; } else if (diff > 0) { td.textContent = '+' + diff; td.style.color = '#4CAF50'; td.style.background = 'rgba(76,175,80,0.15)'; td.style.borderRadius = '3px'; td.title = 'Было: ' + old + ', стало: ' + cc; hasCh = true; } else if (diff === 0) { td.textContent = '0'; td.style.color = '#888'; td.title = 'Было: ' + old + ', стало: ' + cc + ' (без изменений)'; } else { td.textContent = diff; td.style.color = '#ff6666'; td.title = 'Было: ' + old + ', стало: ' + cc; } row.appendChild(td); });
-        rows.forEach(row => { if (row.querySelector('th')) return; const cells = row.querySelectorAll('td'); if (cells.length < 4) return; const tl = cells[1].querySelector('a'); if (!tl) return; const curl = tl.href.replace(/[?&]lastmod=\d+/g, ''), cc = parseInt(cells[3].textContent.trim()) || 0; clean[curl] = { count: cc, date: now }; });
-        saveTrackerCache(clean); trackerTableUpdated = true; if (hasCh) highlightButton('tracker');
+        const table = document.querySelector('table.message-table');
+        if (!table) return;
+        if (!isTrackerPage()) return;
+
+        setTimeout(() => {
+            const oldCache = getTrackerCache();
+            let hasCh = false;
+            const now = Date.now(), oneDay = 24 * 60 * 60 * 1000, clean = {};
+
+            for (const url in oldCache) {
+                const cd = oldCache[url];
+                if (cd && typeof cd === 'object') {
+                    const age = now - cd.date;
+                    if (age <= oneDay) clean[url] = cd;
+                }
+            }
+
+            const hr = table.querySelector('thead tr');
+            if (hr && !hr.querySelector('.lor-new-comments-col')) {
+                const th = document.createElement('th');
+                th.className = 'lor-new-comments-col';
+                th.textContent = 'Новых';
+                th.style.cssText = 'text-align:center;color:#4CAF50;';
+                hr.appendChild(th);
+            }
+
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                if (row.querySelector('th')) return;
+                const cells = row.querySelectorAll('td');
+                if (cells.length < 4) return;
+                const tl = cells[1].querySelector('a');
+                if (!tl) return;
+
+                const curl = tl.href.replace(/[?&]lastmod=\d+/g, '');
+                const cc = parseInt(cells[3].textContent.trim()) || 0;
+                const cdata = clean[curl];
+                const was = cdata && typeof cdata === 'object';
+                const old = was ? cdata.count : 0;
+                const diff = cc - old;
+
+                const ec = row.querySelector('.lor-new-comments-col');
+                if (ec) ec.remove();
+
+                const td = document.createElement('td');
+                td.className = 'lor-new-comments-col';
+                td.style.cssText = 'text-align:center;font-weight:bold;';
+
+                if (!was) {
+                    td.textContent = cc;
+                    td.style.color = '#4a90d9';
+                    td.title = 'Новая тема (всего: ' + cc + ')';
+                } else if (diff > 0) {
+                    td.textContent = '+' + diff;
+                    td.style.color = '#4CAF50';
+                    td.style.background = 'rgba(76,175,80,0.15)';
+                    td.style.borderRadius = '3px';
+                    td.title = 'Было: ' + old + ', стало: ' + cc;
+                    hasCh = true;
+                } else if (diff === 0) {
+                    td.textContent = '0';
+                    td.style.color = '#888';
+                    td.title = 'Было: ' + old + ', стало: ' + cc + ' (без изменений)';
+                } else {
+                    td.textContent = diff;
+                    td.style.color = '#ff6666';
+                    td.title = 'Было: ' + old + ', стало: ' + cc;
+                }
+
+                row.appendChild(td);
+            });
+
+            rows.forEach(row => {
+                if (row.querySelector('th')) return;
+                const cells = row.querySelectorAll('td');
+                if (cells.length < 4) return;
+                const tl = cells[1].querySelector('a');
+                if (!tl) return;
+
+                const curl = tl.href.replace(/[?&]lastmod=\d+/g, '');
+                const cc = parseInt(cells[3].textContent.trim()) || 0;
+                clean[curl] = { count: cc, date: now };
+            });
+
+            saveTrackerCache(clean);
+            trackerTableUpdated = true;
+            if (hasCh) highlightButton('tracker');
+        }, 200);
     }
 
-    function initTrackerPage() { if (isTrackerPage() && !trackerTableUpdated) { setTimeout(() => { if (document.querySelector('table.message-table tbody tr')) updateTrackerTable(); }, 100); } }
-
+    function initTrackerPage() {
+        if (isTrackerPage() && !trackerTableUpdated) {
+            // Увеличиваем задержку и добавляем повторные попытки
+            let attempts = 0;
+            const tryUpdate = () => {
+                if (document.querySelector('table.message-table tbody tr')) {
+                    updateTrackerTable();
+                } else if (attempts < 10) {
+                    attempts++;
+                    setTimeout(tryUpdate, 300);
+                }
+            };
+            setTimeout(tryUpdate, 300);
+        }
+    }
     function fetchLastVisit(nick, cb) {
         fetch(new URL('/people/' + nick + '/profile', window.location.origin).href).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(html => { const idx = html.indexOf('Последнее посещение'); if (idx === -1) { if (cb) cb('неизвестно'); return; } const snip = html.substring(idx, idx + 200); const tm = snip.match(/<time[^>]*>([^<]+)<\/time>/); if (tm) { if (cb) cb(tm[1].trim()); return; } const m = html.match(/<b>Последнее посещение:<\/b>\s*<time[^>]*>([^<]+)<\/time>/); if (cb) cb(m ? m[1].trim() : 'неизвестно'); }).catch(err => { console.log('NSLorPanel: ошибка ' + nick + ' - ' + err.message); if (cb) cb('ошибка'); });
     }
@@ -1674,9 +1782,44 @@
     const domObserver = new MutationObserver(mutations => { let hasNew = false; mutations.forEach(m => { if (m.type === 'childList' && m.addedNodes.length > 0) { for (let i = 0; i < m.addedNodes.length; i++) { const n = m.addedNodes[i]; if (n.nodeType === 1) { if (n.querySelectorAll && n.querySelectorAll('article.msg div.title').length > 0) hasNew = true; if (n.classList && (n.classList.contains('msg') || n.querySelector('.title'))) hasNew = true; } } } }); if (hasNew) setTimeout(makeReplyNicksClickable, 500); });
     domObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
 
-    document.addEventListener('touchstart', e => { if (e.touches.length === 1) { touchStartY = e.touches[0].clientY; touchStartX = e.touches[0].clientX; touchMoved = false; const t = e.target; let inPanel = false; POSITIONS.forEach(pos => { if (mobileCollapsedContainers[pos] && mobileCollapsedContainers[pos].contains(t)) inPanel = true; if (mobileExpandedContainers[pos] && mobileExpandedContainers[pos].contains(t)) inPanel = true; }); e.target._tip = inPanel; } }, { passive: true });
-    document.addEventListener('touchmove', e => { if (e.touches.length === 1) { const dy = e.touches[0].clientY - touchStartY, dx = e.touches[0].clientX - touchStartX; if (Math.abs(dy) > 10 || Math.abs(dx) > 10) touchMoved = true; if (e.target._tip && Math.abs(dy) > Math.abs(dx)) e.preventDefault(); } }, { passive: false });
-    document.addEventListener('touchend', e => { if (!touchMoved) return; const s = getSettings(); if (!s.general.mobileView) { touchMoved = false; return; } const dy = (e.changedTouches[0] ? e.changedTouches[0].clientY : touchStartY) - touchStartY, t = e.target; POSITIONS.forEach(pos => { let inPanel = false; if (mobileCollapsedContainers[pos] && mobileCollapsedContainers[pos].contains(t)) inPanel = true; if (mobileExpandedContainers[pos] && mobileExpandedContainers[pos].contains(t)) inPanel = true; if (inPanel) { if (dy > SWIPE_THRESHOLD) expandMobilePanel(pos); else if (dy < -SWIPE_THRESHOLD) collapseMobilePanel(pos); } }); touchMoved = false; });
+    let touchInPanelPos = null;
+
+    document.addEventListener('touchstart', function(e) {
+        if (e.touches.length !== 1) { touchInPanelPos = null; return; }
+        touchStartY = e.touches[0].clientY;
+        touchStartX = e.touches[0].clientX;
+        touchMoved = false;
+        const t = e.target;
+        touchInPanelPos = null;
+        POSITIONS.forEach(function(pos) {
+            if (mobileCollapsedContainers[pos] && mobileCollapsedContainers[pos].contains(t)) touchInPanelPos = pos;
+            if (mobileExpandedContainers[pos] && mobileExpandedContainers[pos].contains(t)) touchInPanelPos = pos;
+        });
+    }, { passive: false });
+
+    document.addEventListener('touchmove', function(e) {
+        if (e.touches.length !== 1) return;
+        const dy = e.touches[0].clientY - touchStartY;
+        const dx = e.touches[0].clientX - touchStartX;
+        if (Math.abs(dy) > 10 || Math.abs(dx) > 10) touchMoved = true;
+        // Блокируем прокрутку страницы ТОЛЬКО если жест начался на панели и движение вертикальное
+        if (touchInPanelPos !== null && Math.abs(dy) > Math.abs(dx)) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+    document.addEventListener('touchend', function(e) {
+        const pos = touchInPanelPos;
+        touchInPanelPos = null;
+        if (pos === null) { touchMoved = false; return; }
+        const s = getSettings();
+        if (!s.general.mobileView) { touchMoved = false; return; }
+        if (!touchMoved) { touchMoved = false; return; }
+        const dy = (e.changedTouches[0] ? e.changedTouches[0].clientY : touchStartY) - touchStartY;
+        if (dy > SWIPE_THRESHOLD) expandMobilePanel(pos);
+        else if (dy < -SWIPE_THRESHOLD) collapseMobilePanel(pos);
+        touchMoved = false;
+    });
 
     function expandMobilePanel(pos) {
         if (isMobilePanelExpanded[pos]) return;
