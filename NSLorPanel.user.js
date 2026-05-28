@@ -633,33 +633,56 @@
 
     function createModal(title, width, content, zindex, id, onclose) {
         const settings = getSettings(), modalScale = settings.general.modalScale / 100, isDark = isDarkTheme();
+        const originalBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
         const overlay = document.createElement('div');
         overlay.id = id || '';
         overlay.className = 'lor-panel-modal-overlay';
         overlay.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:${zindex || 100000};display:flex;align-items:center;justify-content:center;padding:10px;box-sizing:border-box;`;
+
         const modal = document.createElement('div');
         modal.style.cssText = `background:${isDark ? '#0a0a14' : '#fff'};border:1px solid ${isDark ? '#333' : '#ccc'};padding:${Math.round(24 * modalScale)}px;border-radius:${Math.round(8 * modalScale)}px;width:100%;max-width:${Math.round((width || 600) * modalScale)}px;max-height:85vh;box-sizing:border-box;color:${isDark ? '#ccc' : '#333'};font-family:Arial,sans-serif;font-size:${Math.round(14 * modalScale)}px;box-shadow:0 0 30px rgba(0,0,0,${isDark ? '0.8' : '0.2'});display:flex;flex-direction:column;overflow:hidden;`;
+
         const header = document.createElement('div');
         header.style.cssText = `display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid ${isDark ? '#333' : '#ccc'};flex-shrink:0;`;
+
         const titleEl = document.createElement('div');
         titleEl.textContent = title;
         titleEl.style.cssText = `font-size:${Math.round(16 * modalScale)}px;font-weight:bold;word-break:break-word;flex:1;`;
         header.appendChild(titleEl);
+
         const closeBtn = document.createElement('div');
         closeBtn.textContent = '✕';
         closeBtn.style.cssText = `cursor:pointer;font-size:${Math.round(20 * modalScale)}px;color:${isDark ? '#888' : '#666'};flex-shrink:0;margin-left:12px;padding:0 4px;`;
+        header.appendChild(closeBtn);
+
         const contentDiv = document.createElement('div');
-        contentDiv.style.cssText = 'overflow-y:auto;flex:1;min-height:0;padding-right:4px;';
+        // Исправлено: сплошной фон, запрет прокрутки за пределы контейнера, разрешение только вертикального скролла
+        contentDiv.style.cssText = `overflow-y:auto;flex:1;min-height:0;padding-right:4px;padding-bottom:8px;background:${isDark ? '#0a0a14' : '#fff'};overscroll-behavior:contain;touch-action:pan-y;`;
         if (typeof content === 'string') contentDiv.innerHTML = content;
         else contentDiv.appendChild(content);
-        const closeFn = function() { overlay.remove(); if (onclose) onclose(); };
-        closeBtn.onclick = closeFn;
-        header.appendChild(closeBtn);
+
         modal.appendChild(header);
         modal.appendChild(contentDiv);
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
+
+        const closeFn = function() {
+            overlay.remove();
+            document.body.style.overflow = originalBodyOverflow;
+            if (onclose) onclose();
+        };
+
+        closeBtn.onclick = closeFn;
         overlay.onclick = function(e) { if (e.target === overlay) closeFn(); };
+
+        // Полная изоляция касаний модалки от глобальных обработчиков свайпа панели
+        modal.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+        modal.addEventListener('touchmove', e => e.stopPropagation(), { passive: true });
+        contentDiv.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+        contentDiv.addEventListener('touchmove', e => e.stopPropagation(), { passive: true });
+
         overlay._closeLorModal = closeFn;
         return { overlay, modal, content: contentDiv, close: closeFn };
     }
