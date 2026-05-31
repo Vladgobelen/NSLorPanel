@@ -126,6 +126,9 @@
             applyCutMode(article, shouldFilter);
         }
     }
+    function isNewsArticlePage() {
+        return /\/news\/.*\/\d+$/.test(location.pathname);
+    }
     function applyBlurMode(article, shouldBlur) {
         if (shouldBlur) {
             if (!article._wasBlurred) {
@@ -198,7 +201,14 @@
     }
     function getPanelFilterSettings() {
         var saved = safeLocalStorageGet(CONFIG.PANEL_SETTINGS_KEY, null);
-        var def = { enabled: true, mode: 'cut', applyToMini: true, animateBlur: true, deletedMode: 'hide' };
+        var def = {
+            enabled: true,
+            mode: 'cut',
+            applyToMini: true,
+            animateBlur: true,
+            deletedMode: 'hide',
+            disableScrollInTopics: false
+        };
         if (!saved || !saved.filter) return def;
         var f = saved.filter;
         return {
@@ -206,7 +216,8 @@
             mode: f.mode || def.mode,
             applyToMini: f.applyToMini !== undefined ? f.applyToMini : def.applyToMini,
             animateBlur: f.animateBlur !== undefined ? f.animateBlur : def.animateBlur,
-            deletedMode: f.deletedMode || def.deletedMode
+            deletedMode: f.deletedMode || def.deletedMode,
+            disableScrollInTopics: f.disableScrollInTopics !== undefined ? f.disableScrollInTopics : def.disableScrollInTopics
         };
     }
     function getBlacklist() {
@@ -408,6 +419,11 @@
     }
     function initNewsPage() {
         if (state.newsInitialized) return;
+
+        if (state.filterSettings.disableScrollInTopics && isNewsArticlePage()) {
+            return;
+        }
+
         state.newsInitialized = true;
         var articles = getFilterableArticles();
         for (var i = 0; i < articles.length; i++) {
@@ -420,6 +436,11 @@
     function init() {
         state.filterSettings = getPanelFilterSettings();
         state.blacklist = getBlacklist();
+
+        if (isNewsArticlePage()) {
+            state.currentOffset = 0;
+        }
+
         filterExistingArticles();
         processDeletedComments();
         var events = ['lor-blacklist-changed', 'lor-filter-settings-changed'];

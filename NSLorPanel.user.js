@@ -8,7 +8,7 @@
 // @run-at       document-idle
 // ==/UserScript==
 
-(function() {
+(function(){ 
     'use strict';
 
     const THEME_COLORS = {
@@ -35,7 +35,21 @@
         mention: { text: '📢', title: 'Упоминания', action: goToMyLastComment },
         blacklist: { text: '🚫', title: 'Чёрный список', action: showBlacklistModal, longPressAction: 'blacklist' },
         visits: { text: '🕐', title: 'Посещения', action: showVisitsModal, longPressAction: 'visits' },
-        down: { text: '▼', title: 'Вниз', action: () => { const s = getSettings(); const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto'; window.scrollTo({ top: document.body.scrollHeight, behavior: bhv }); }, showSettings: true },
+        down: {
+            text: '▼',
+            title: 'Вниз',
+            action: () => {
+                const s = getSettings();
+                const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
+                const comments = document.querySelectorAll('article.msg');
+                if (comments.length > 0) {
+                    comments[comments.length - 1].scrollIntoView({ behavior: bhv, block: 'end' });
+                } else {
+                    window.scrollTo({ top: document.body.scrollHeight, behavior: bhv });
+                }
+            },
+            showSettings: true
+        },
         help: { text: '❓', title: 'Справка', action: showHelpModal },
         toggleCode: { text: '</>', title: 'Развернуть/Свернуть весь код', action: toggleAllCodeBlocks },
         settings: { text: '⚙', title: 'Настройки', action: showSettingsModal }
@@ -100,7 +114,7 @@
     function getDefaultSettings() {
         return {
             general: { showBorder: false, scale: 100, modalScale: 100, mobileView: false, mobileScale: 120, orientation: 'vertical', smoothScroll: true, enableAnimations: true },
-            filter: { enabled: true, mode: 'cut', applyToMini: true, animateBlur: true, deletedMode: 'hide' },
+            filter: { enabled: true, mode: 'cut', applyToMini: true, animateBlur: true, deletedMode: 'hide', disableScrollInTopics: false },
             buttons: {
                 profile: { right: true, left: false, top: false, bottom: false },
                 up: { right: true, left: false, top: false, bottom: false },
@@ -141,6 +155,7 @@
                 if (saved.filter.applyToMini === undefined) saved.filter.applyToMini = def.filter.applyToMini;
                 if (saved.filter.animateBlur === undefined) saved.filter.animateBlur = def.filter.animateBlur;
                 if (!saved.filter.deletedMode || ['show','blur','hide'].indexOf(saved.filter.deletedMode) === -1) saved.filter.deletedMode = def.filter.deletedMode;
+                if (saved.filter.disableScrollInTopics === undefined) saved.filter.disableScrollInTopics = def.filter.disableScrollInTopics;
                 if (!saved.buttons) saved.buttons = def.buttons;
                 for (const key in def.buttons) {
                     if (saved.buttons[key] === undefined) saved.buttons[key] = def.buttons[key];
@@ -152,7 +167,7 @@
                 def.buttonOrder.forEach(k => { if (saved.buttonOrder.indexOf(k) === -1) { saved.buttonOrder.push(k); orderChanged = true; } });
                 if (orderChanged) saveSettings(saved);
                 return saved;
-            }
+             }
         } catch(e) {}
         return getDefaultSettings();
     }
@@ -380,28 +395,24 @@
         const settings = getSettings(), colors = getThemeColors(), mscale = settings.general.mobileScale / 100;
         const gap = Math.round(8 * mscale), padding = Math.round(8 * mscale);
         cleanupPanels();
-
         if (!document.getElementById('lor-mobile-touch-styles')) {
             const touchStyle = document.createElement('style');
             touchStyle.id = 'lor-mobile-touch-styles';
             touchStyle.textContent = `
     .lor-mobile-collapsed,
     .lor-mobile-expanded {
-        touch-action: none !important;
-        overscroll-behavior: contain !important;
-        -webkit-user-select: none !important;
-        user-select: none !important;
+    touch-action: none !important;
+    overscroll-behavior: contain !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
     }
     `;
             document.head.appendChild(touchStyle);
         }
-
         const collapsedButtons = ['up', 'notifications', 'down'];
-
         const upCfg = settings.buttons['up'] || { right: true, left: false, top: false, bottom: false };
         let collapsedPos = 'right';
         POSITIONS.forEach(pos => { if (upCfg[pos]) collapsedPos = pos; });
-
         const collapsed = document.createElement('div');
         collapsed.className = 'lor-mobile-collapsed lor-mobile-' + collapsedPos;
         collapsed.style.cssText = `position:fixed !important;z-index:9999 !important;display:flex !important;gap:${gap}px !important;touch-action:none !important;overscroll-behavior:contain !important;-webkit-user-select:none !important;user-select:none !important;`;
@@ -411,14 +422,11 @@
             collapsed.style.padding = padding + 'px';
         }
         collapsed.style.flexDirection = (collapsedPos === 'right' || collapsedPos === 'left') ? 'column' : 'row';
-
         collapsedButtons.forEach(btnId => {
             const def = BUTTON_DEFS[btnId];
             if (!def) return;
-
             const btn = createButton(def.text, def.title, null, false, settings.general.mobileScale);
             btn.style.position = 'relative';
-
             if (btnId === 'up') {
                 btn.onclick = e => {
                     if (btn._cmjf) { e.preventDefault(); e.stopPropagation(); return; }
@@ -440,18 +448,20 @@
                     if (btn._cmjf) { e.preventDefault(); e.stopPropagation(); return; }
                     const s = getSettings();
                     const bhv = (s.general.smoothScroll && s.general.enableAnimations) ? 'smooth' : 'auto';
-                    window.scrollTo({ top: document.body.scrollHeight, behavior: bhv });
+                    const comments = document.querySelectorAll('article.msg');
+                    if (comments.length > 0) {
+                        comments[comments.length - 1].scrollIntoView({ behavior: bhv, block: 'end' });
+                    } else {
+                        window.scrollTo({ top: document.body.scrollHeight, behavior: bhv });
+                    }
                 };
                 btn.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showExtraButtons(btn, collapsedPos); });
             }
-
             collapsed.appendChild(btn);
             allButtons[btnId + '_mobile'] = btn;
         });
-
         document.body.appendChild(collapsed);
         mobileCollapsedContainers[collapsedPos] = collapsed;
-
         POSITIONS.forEach(pos => {
             let hasBtns = false;
             const ordered = getOrderedButtons(settings);
@@ -463,7 +473,6 @@
             const profCfg = settings.buttons['profile'];
             const hasProf = profCfg && typeof profCfg === 'object' && profCfg[pos];
             if (!hasBtns && !hasProf) return;
-
             const expanded = document.createElement('div');
             expanded.className = 'lor-mobile-expanded lor-mobile-' + pos;
             expanded.style.cssText = `position:fixed !important;z-index:9999 !important;display:none !important;gap:${gap}px !important;touch-action:none !important;overscroll-behavior:contain !important;-webkit-user-select:none !important;user-select:none !important;`;
@@ -480,7 +489,6 @@
                 expanded.style.borderRadius = '12px';
                 expanded.style.padding = padding + 'px';
             }
-
             if (hasProf) {
                 const profBtn = createButton('👤', 'Профиль', null, true, settings.general.mobileScale);
                 profBtn.style.position = 'relative';
@@ -489,20 +497,16 @@
                 expanded.appendChild(profBtn);
                 allButtons['profile_' + pos] = profBtn;
             }
-
             ordered.forEach(id => {
                 if (id === 'profile' || id === 'up' || id === 'notifications' || id === 'down') return;
                 const cfg = settings.buttons[id];
                 if (!cfg || !cfg[pos]) return;
                 addBtnToPanel(expanded, id, pos, settings, settings.general.mobileScale);
             });
-
             document.body.appendChild(expanded);
             mobileExpandedContainers[pos] = expanded;
         });
-
         positionMobilePanels();
-
         if (settings.buttons['notifications']) {
             if (notifIntervalId) clearInterval(notifIntervalId);
             notifIntervalId = setInterval(() => {
@@ -673,7 +677,6 @@
         header.appendChild(closeBtn);
 
         const contentDiv = document.createElement('div');
-        // Исправлено: сплошной фон, запрет прокрутки за пределы контейнера, разрешение только вертикального скролла
         contentDiv.style.cssText = `overflow-y:auto;flex:1;min-height:0;padding-right:4px;padding-bottom:8px;background:${isDark ? '#0a0a14' : '#fff'};overscroll-behavior:contain;touch-action:pan-y;`;
         if (typeof content === 'string') contentDiv.innerHTML = content;
         else contentDiv.appendChild(content);
@@ -692,7 +695,6 @@
         closeBtn.onclick = closeFn;
         overlay.onclick = function(e) { if (e.target === overlay) closeFn(); };
 
-        // Полная изоляция касаний модалки от глобальных обработчиков свайпа панели
         modal.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
         modal.addEventListener('touchmove', e => e.stopPropagation(), { passive: true });
         contentDiv.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
@@ -978,12 +980,29 @@
             var animateLabel = document.createElement('label'); animateLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
             var animateCheck = document.createElement('input'); animateCheck.type = 'checkbox'; animateCheck.id = 'lor-filter-animate'; animateCheck.checked = settings.filter.animateBlur; animateCheck.style.cssText = 'width:16px;height:16px;';
             animateLabel.appendChild(animateCheck); var animateText = document.createElement('span'); animateText.textContent = 'Анимировать появление/исчезновение блюра'; animateLabel.appendChild(animateText); animateDiv.appendChild(animateLabel); content.appendChild(animateDiv);
+
+            var disableScrollDiv = document.createElement('div');
+            disableScrollDiv.style.cssText = 'margin-bottom:16px;';
+            var disableScrollLabel = document.createElement('label');
+            disableScrollLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var disableScrollCheck = document.createElement('input');
+            disableScrollCheck.type = 'checkbox';
+            disableScrollCheck.id = 'lor-filter-disable-scroll';
+            disableScrollCheck.checked = settings.filter.disableScrollInTopics;
+            disableScrollCheck.style.cssText = 'width:16px;height:16px;';
+            disableScrollLabel.appendChild(disableScrollCheck);
+            var disableScrollText = document.createElement('span');
+            disableScrollText.textContent = 'Не подгружать ленту на страницах конкретных новостей';
+            disableScrollLabel.appendChild(disableScrollText);
+            disableScrollDiv.appendChild(disableScrollLabel);
+            content.appendChild(disableScrollDiv);
+
             var deletedDiv = document.createElement('div'); deletedDiv.style.cssText = 'margin-bottom:16px;';
             var deletedTitle = document.createElement('div'); deletedTitle.textContent = 'Удалённые сообщения:'; deletedTitle.style.cssText = 'font-weight:bold;margin-bottom:8px;'; deletedDiv.appendChild(deletedTitle);
             var deletedOptions = [{ value: 'show', text: 'Отображать удалённые' }, { value: 'blur', text: 'Размывать удалённые' }, { value: 'hide', text: 'Не отображать удалённые' }];
             deletedOptions.forEach(function(opt) { var lbl = document.createElement('label'); lbl.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;'; var radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'lor-filter-deleted-mode'; radio.value = opt.value; radio.checked = settings.filter.deletedMode === opt.value; radio.style.cssText = 'width:16px;height:16px;'; lbl.appendChild(radio); var txt = document.createElement('span'); txt.textContent = opt.text; lbl.appendChild(txt); lbl.onclick = function() { radio.checked = true; }; deletedDiv.appendChild(lbl); });
             content.appendChild(deletedDiv);
-            var hint = document.createElement('div'); hint.style.cssText = 'margin-top:20px;padding:10px;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';background:' + (isDark ? '#1a1a2e' : '#f5f5f5') + ';border-radius:4px;'; hint.innerHTML = '<b>Примечание:</b> Режим «Вырезать» включает бесконечную ленту новостей. Режим «Размывать» только скрывает контент визуально, лента не подгружается. Настройки применяются сразу после сохранения.'; content.appendChild(hint);
+            var hint = document.createElement('div'); hint.style.cssText = 'margin-top:20px;padding:10px;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';background:' + (isDark ? '#1a1a2e' : '#f5f5f5') + ';border-radius:4px;'; hint.innerHTML = '<b>Примечание:</b> Режим «Вырезать» включает бесконечную ленту новостей. Режим «Размывать» только скрывает контент визуально, лента не подгружается. Настройки применяются сразу после сохранения.';  content.appendChild(hint);
         }
         function renderHelpTab() {
             content.innerHTML = '';
@@ -1022,7 +1041,7 @@
         tabFilter.onclick = function() { currentTab = 'filter'; tabFilter.style.borderBottomColor = '#4a90d9'; tabFilter.style.color = '#4a90d9'; tabFilter.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal'; tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal'; renderFilterTab(); };
         tabHelp.onclick = function() { currentTab = 'help'; tabHelp.style.borderBottomColor = '#4a90d9'; tabHelp.style.color = '#4a90d9'; tabHelp.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal'; tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal'; renderHelpTab(); };
         saveBtn.onclick = function() {
-            var mobileViewCheck = document.getElementById('lor-setting-mobile-view'); var borderCheck = document.getElementById('lor-setting-border'); var animationsCheck = document.getElementById('lor-setting-animations'); var scaleSelect = document.getElementById('lor-setting-scale'); var mobileScaleSelect = document.getElementById('lor-setting-mobile-scale'); var modalScaleSelect = document.getElementById('lor-setting-modal-scale');
+             var mobileViewCheck = document.getElementById('lor-setting-mobile-view'); var borderCheck = document.getElementById('lor-setting-border'); var animationsCheck = document.getElementById('lor-setting-animations'); var scaleSelect = document.getElementById('lor-setting-scale'); var mobileScaleSelect = document.getElementById('lor-setting-mobile-scale'); var modalScaleSelect = document.getElementById('lor-setting-modal-scale');
             if (mobileViewCheck) settings.general.mobileView = mobileViewCheck.checked;
             if (borderCheck) settings.general.showBorder = borderCheck.checked;
             if (animationsCheck) settings.general.enableAnimations = animationsCheck.checked;
@@ -1038,6 +1057,10 @@
             if (filterAnimate) settings.filter.animateBlur = filterAnimate.checked;
             var deletedModeRadio = document.querySelector('input[name="lor-filter-deleted-mode"]:checked');
             if (deletedModeRadio) settings.filter.deletedMode = deletedModeRadio.value;
+
+            var filterDisableScroll = document.getElementById('lor-filter-disable-scroll');
+            if (filterDisableScroll) settings.filter.disableScrollInTopics = filterDisableScroll.checked;
+
             saveSettings(settings);
             window.dispatchEvent(new CustomEvent('lor-filter-settings-changed', { detail: { settings: settings.filter } }));
             closeSettings();
@@ -1377,7 +1400,6 @@
 
     function initTrackerPage() {
         if (isTrackerPage() && !trackerTableUpdated) {
-            // Увеличиваем задержку и добавляем повторные попытки
             let attempts = 0;
             const tryUpdate = () => {
                 if (document.querySelector('table.message-table tbody tr')) {
@@ -1802,7 +1824,6 @@
         const dy = e.touches[0].clientY - touchStartY;
         const dx = e.touches[0].clientX - touchStartX;
         if (Math.abs(dy) > 10 || Math.abs(dx) > 10) touchMoved = true;
-        // Блокируем прокрутку страницы ТОЛЬКО если жест начался на панели и движение вертикальное
         if (touchInPanelPos !== null && Math.abs(dy) > Math.abs(dx)) {
             e.preventDefault();
         }
