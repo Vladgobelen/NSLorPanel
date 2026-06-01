@@ -19,7 +19,7 @@
     };
 
     var SELECTORS = {
-        ARTICLES: 'article.msg',
+        ARTICLES: 'article.msg, article.news',
         AUTHOR: [
             'a[itemprop="creator"]',
             '.sign a[href*="/people/"]',
