@@ -8,7 +8,7 @@
 // @run-at       document-idle
 // ==/UserScript==
 
-(function(){ 
+(function(){
     'use strict';
 
     const THEME_COLORS = {
@@ -959,27 +959,89 @@
         }
         function renderFilterTab() {
             content.innerHTML = '';
-            var enabledDiv = document.createElement('div'); enabledDiv.style.cssText = 'margin-bottom:16px;';
-            var enabledLabel = document.createElement('label'); enabledLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
-            var enabledCheck = document.createElement('input'); enabledCheck.type = 'checkbox'; enabledCheck.id = 'lor-filter-enabled'; enabledCheck.checked = settings.filter.enabled; enabledCheck.style.cssText = 'width:16px;height:16px;';
-            enabledLabel.appendChild(enabledCheck); var enabledText = document.createElement('span'); enabledText.textContent = 'Включить фильтрацию новостей по чёрному списку'; enabledLabel.appendChild(enabledText);
-            enabledDiv.appendChild(enabledLabel); content.appendChild(enabledDiv);
-            var modeDiv = document.createElement('div'); modeDiv.style.cssText = 'margin-bottom:16px;';
-            var modeTitle = document.createElement('div'); modeTitle.textContent = 'Режим обработки:'; modeTitle.style.cssText = 'font-weight:bold;margin-bottom:8px;'; modeDiv.appendChild(modeTitle);
-            var cutLabel = document.createElement('label'); cutLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;';
-            var cutRadio = document.createElement('input'); cutRadio.type = 'radio'; cutRadio.name = 'lor-filter-mode'; cutRadio.value = 'cut'; cutRadio.checked = settings.filter.mode === 'cut'; cutRadio.style.cssText = 'width:16px;height:16px;';
-            cutLabel.appendChild(cutRadio); var cutText = document.createElement('span'); cutText.innerHTML = '<b>Вырезать</b> новости (скрывать) + бесконечная лента'; cutLabel.appendChild(cutText); modeDiv.appendChild(cutLabel);
-            var blurLabel = document.createElement('label'); blurLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
-            var blurRadio = document.createElement('input'); blurRadio.type = 'radio'; blurRadio.name = 'lor-filter-mode'; blurRadio.value = 'blur'; blurRadio.checked = settings.filter.mode === 'blur'; blurRadio.style.cssText = 'width:16px;height:16px;';
-            blurLabel.appendChild(blurRadio); var blurText = document.createElement('span'); blurText.innerHTML = '<b>Размывать</b> новости (blur) — без бесконечной ленты'; blurLabel.appendChild(blurText); modeDiv.appendChild(blurLabel); content.appendChild(modeDiv);
-            var miniDiv = document.createElement('div'); miniDiv.style.cssText = 'margin-bottom:16px;';
-            var miniLabel = document.createElement('label'); miniLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
-            var miniCheck = document.createElement('input'); miniCheck.type = 'checkbox'; miniCheck.id = 'lor-filter-mini'; miniCheck.checked = settings.filter.applyToMini; miniCheck.style.cssText = 'width:16px;height:16px;';
-            miniLabel.appendChild(miniCheck); var miniText = document.createElement('span'); miniText.textContent = 'Проверять авторов мини-новостей (через загрузку страницы)'; miniLabel.appendChild(miniText); miniDiv.appendChild(miniLabel); content.appendChild(miniDiv);
-            var animateDiv = document.createElement('div'); animateDiv.style.cssText = 'margin-bottom:16px;';
-            var animateLabel = document.createElement('label'); animateLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
-            var animateCheck = document.createElement('input'); animateCheck.type = 'checkbox'; animateCheck.id = 'lor-filter-animate'; animateCheck.checked = settings.filter.animateBlur; animateCheck.style.cssText = 'width:16px;height:16px;';
-            animateLabel.appendChild(animateCheck); var animateText = document.createElement('span'); animateText.textContent = 'Анимировать появление/исчезновение блюра'; animateLabel.appendChild(animateText); animateDiv.appendChild(animateLabel); content.appendChild(animateDiv);
+            var enabledDiv = document.createElement('div');
+            enabledDiv.style.cssText = 'margin-bottom:16px;';
+            var enabledLabel = document.createElement('label');
+            enabledLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var enabledCheck = document.createElement('input');
+            enabledCheck.type = 'checkbox';
+            enabledCheck.id = 'lor-filter-enabled';
+            enabledCheck.checked = settings.filter.enabled;
+            enabledCheck.style.cssText = 'width:16px;height:16px;';
+            enabledLabel.appendChild(enabledCheck);
+            var enabledText = document.createElement('span');
+            enabledText.textContent = 'Включить фильтрацию новостей по чёрному списку';
+            enabledLabel.appendChild(enabledText);
+            enabledDiv.appendChild(enabledLabel);
+            content.appendChild(enabledDiv);
+
+            var modeDiv = document.createElement('div');
+            modeDiv.style.cssText = 'margin-bottom:16px;';
+            var modeTitle = document.createElement('div');
+            modeTitle.textContent = 'Режим обработки:';
+            modeTitle.style.cssText = 'font-weight:bold;margin-bottom:8px;';
+            modeDiv.appendChild(modeTitle);
+
+            var cutLabel = document.createElement('label');
+            cutLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;';
+            var cutRadio = document.createElement('input');
+            cutRadio.type = 'radio';
+            cutRadio.name = 'lor-filter-mode';
+            cutRadio.value = 'cut';
+            cutRadio.checked = settings.filter.mode === 'cut';
+            cutRadio.style.cssText = 'width:16px;height:16px;';
+            cutLabel.appendChild(cutRadio);
+            var cutText = document.createElement('span');
+            cutText.innerHTML = '<b>Вырезать</b> новости (скрывать) + бесконечная лента';
+            cutLabel.appendChild(cutText);
+            modeDiv.appendChild(cutLabel);
+
+            var blurLabel = document.createElement('label');
+            blurLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var blurRadio = document.createElement('input');
+            blurRadio.type = 'radio';
+            blurRadio.name = 'lor-filter-mode';
+            blurRadio.value = 'blur';
+            blurRadio.checked = settings.filter.mode === 'blur';
+            blurRadio.style.cssText = 'width:16px;height:16px;';
+            blurLabel.appendChild(blurRadio);
+            var blurText = document.createElement('span');
+            blurText.innerHTML = '<b>Размывать</b> новости (blur) — без бесконечной ленты';
+            blurLabel.appendChild(blurText);
+            modeDiv.appendChild(blurLabel);
+            content.appendChild(modeDiv);
+
+            var miniDiv = document.createElement('div');
+            miniDiv.style.cssText = 'margin-bottom:16px;';
+            var miniLabel = document.createElement('label');
+            miniLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var miniCheck = document.createElement('input');
+            miniCheck.type = 'checkbox';
+            miniCheck.id = 'lor-filter-mini';
+            miniCheck.checked = settings.filter.applyToMini;
+            miniCheck.style.cssText = 'width:16px;height:16px;';
+            miniLabel.appendChild(miniCheck);
+            var miniText = document.createElement('span');
+            miniText.textContent = 'Проверять авторов мини-новостей (через загрузку страницы)';
+            miniLabel.appendChild(miniText);
+            miniDiv.appendChild(miniLabel);
+            content.appendChild(miniDiv);
+
+            var animateDiv = document.createElement('div');
+            animateDiv.style.cssText = 'margin-bottom:16px;';
+            var animateLabel = document.createElement('label');
+            animateLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var animateCheck = document.createElement('input');
+            animateCheck.type = 'checkbox';
+            animateCheck.id = 'lor-filter-animate';
+            animateCheck.checked = settings.filter.animateBlur;
+            animateCheck.style.cssText = 'width:16px;height:16px;';
+            animateLabel.appendChild(animateCheck);
+            var animateText = document.createElement('span');
+            animateText.textContent = 'Анимировать появление/исчезновение блюра';
+            animateLabel.appendChild(animateText);
+            animateDiv.appendChild(animateLabel);
+            content.appendChild(animateDiv);
 
             var disableScrollDiv = document.createElement('div');
             disableScrollDiv.style.cssText = 'margin-bottom:16px;';
@@ -997,12 +1059,51 @@
             disableScrollDiv.appendChild(disableScrollLabel);
             content.appendChild(disableScrollDiv);
 
-            var deletedDiv = document.createElement('div'); deletedDiv.style.cssText = 'margin-bottom:16px;';
-            var deletedTitle = document.createElement('div'); deletedTitle.textContent = 'Удалённые сообщения:'; deletedTitle.style.cssText = 'font-weight:bold;margin-bottom:8px;'; deletedDiv.appendChild(deletedTitle);
+            var highlightModsDiv = document.createElement('div');
+            highlightModsDiv.style.cssText = 'margin-bottom:16px;';
+            var highlightModsLabel = document.createElement('label');
+            highlightModsLabel.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;';
+            var highlightModsCheck = document.createElement('input');
+            highlightModsCheck.type = 'checkbox';
+            highlightModsCheck.id = 'lor-filter-highlight-mods';
+            highlightModsCheck.checked = settings.filter.highlightMods || false;
+            highlightModsCheck.style.cssText = 'width:16px;height:16px;';
+            highlightModsLabel.appendChild(highlightModsCheck);
+            var highlightModsText = document.createElement('span');
+            highlightModsText.textContent = 'Подсвечивать модераторов (проверка профиля)';
+            highlightModsLabel.appendChild(highlightModsText);
+            highlightModsDiv.appendChild(highlightModsLabel);
+            content.appendChild(highlightModsDiv);
+
+            var deletedDiv = document.createElement('div');
+            deletedDiv.style.cssText = 'margin-bottom:16px;';
+            var deletedTitle = document.createElement('div');
+            deletedTitle.textContent = 'Удалённые сообщения:';
+            deletedTitle.style.cssText = 'font-weight:bold;margin-bottom:8px;';
+            deletedDiv.appendChild(deletedTitle);
             var deletedOptions = [{ value: 'show', text: 'Отображать удалённые' }, { value: 'blur', text: 'Размывать удалённые' }, { value: 'hide', text: 'Не отображать удалённые' }];
-            deletedOptions.forEach(function(opt) { var lbl = document.createElement('label'); lbl.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;'; var radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'lor-filter-deleted-mode'; radio.value = opt.value; radio.checked = settings.filter.deletedMode === opt.value; radio.style.cssText = 'width:16px;height:16px;'; lbl.appendChild(radio); var txt = document.createElement('span'); txt.textContent = opt.text; lbl.appendChild(txt); lbl.onclick = function() { radio.checked = true; }; deletedDiv.appendChild(lbl); });
+            deletedOptions.forEach(function(opt) {
+                var lbl = document.createElement('label');
+                lbl.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;';
+                var radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = 'lor-filter-deleted-mode';
+                radio.value = opt.value;
+                radio.checked = settings.filter.deletedMode === opt.value;
+                radio.style.cssText = 'width:16px;height:16px;';
+                lbl.appendChild(radio);
+                var txt = document.createElement('span');
+                txt.textContent = opt.text;
+                lbl.appendChild(txt);
+                lbl.onclick = function() { radio.checked = true; };
+                deletedDiv.appendChild(lbl);
+            });
             content.appendChild(deletedDiv);
-            var hint = document.createElement('div'); hint.style.cssText = 'margin-top:20px;padding:10px;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';background:' + (isDark ? '#1a1a2e' : '#f5f5f5') + ';border-radius:4px;'; hint.innerHTML = '<b>Примечание:</b> Режим «Вырезать» включает бесконечную ленту новостей. Режим «Размывать» только скрывает контент визуально, лента не подгружается. Настройки применяются сразу после сохранения.';  content.appendChild(hint);
+
+            var hint = document.createElement('div');
+            hint.style.cssText = 'margin-top:20px;padding:10px;font-size:' + Math.round(12 * modalScale) + 'px;color:' + (isDark ? '#888' : '#666') + ';background:' + (isDark ? '#1a1a2e' : '#f5f5f5') + ';border-radius:4px;';
+            hint.innerHTML = '<b>Примечание:</b> Режим «Вырезать» включает бесконечную ленту новостей. Режим «Размывать» только скрывает контент визуально, лента не подгружается. Настройки применяются сразу после сохранения.';
+            content.appendChild(hint);
         }
         function renderHelpTab() {
             content.innerHTML = '';
@@ -1041,25 +1142,43 @@
         tabFilter.onclick = function() { currentTab = 'filter'; tabFilter.style.borderBottomColor = '#4a90d9'; tabFilter.style.color = '#4a90d9'; tabFilter.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal'; tabHelp.style.borderBottomColor = 'transparent'; tabHelp.style.color = isDark ? '#888' : '#666'; tabHelp.style.fontWeight = 'normal'; renderFilterTab(); };
         tabHelp.onclick = function() { currentTab = 'help'; tabHelp.style.borderBottomColor = '#4a90d9'; tabHelp.style.color = '#4a90d9'; tabHelp.style.fontWeight = 'bold'; tabGeneral.style.borderBottomColor = 'transparent'; tabGeneral.style.color = isDark ? '#888' : '#666'; tabGeneral.style.fontWeight = 'normal'; tabButtons.style.borderBottomColor = 'transparent'; tabButtons.style.color = isDark ? '#888' : '#666'; tabButtons.style.fontWeight = 'normal'; tabFilter.style.borderBottomColor = 'transparent'; tabFilter.style.color = isDark ? '#888' : '#666'; tabFilter.style.fontWeight = 'normal'; renderHelpTab(); };
         saveBtn.onclick = function() {
-             var mobileViewCheck = document.getElementById('lor-setting-mobile-view'); var borderCheck = document.getElementById('lor-setting-border'); var animationsCheck = document.getElementById('lor-setting-animations'); var scaleSelect = document.getElementById('lor-setting-scale'); var mobileScaleSelect = document.getElementById('lor-setting-mobile-scale'); var modalScaleSelect = document.getElementById('lor-setting-modal-scale');
+            var mobileViewCheck = document.getElementById('lor-setting-mobile-view');
+            var borderCheck = document.getElementById('lor-setting-border');
+            var animationsCheck = document.getElementById('lor-setting-animations');
+            var scaleSelect = document.getElementById('lor-setting-scale');
+            var mobileScaleSelect = document.getElementById('lor-setting-mobile-scale');
+            var modalScaleSelect = document.getElementById('lor-setting-modal-scale');
+
             if (mobileViewCheck) settings.general.mobileView = mobileViewCheck.checked;
             if (borderCheck) settings.general.showBorder = borderCheck.checked;
             if (animationsCheck) settings.general.enableAnimations = animationsCheck.checked;
             if (scaleSelect) { var val = parseInt(scaleSelect.value); if (val >= 30 && val <= 200) settings.general.scale = val; }
             if (mobileScaleSelect) { var mval = parseInt(mobileScaleSelect.value); if (mval >= 30 && mval <= 300) settings.general.mobileScale = mval; }
             if (modalScaleSelect) { var mmval = parseInt(modalScaleSelect.value); if (mmval >= 30 && mmval <= 200) settings.general.modalScale = mmval; }
+
             var btnChecks = document.querySelectorAll('.lor-setting-btn');
-            btnChecks.forEach(function(cb) { var key = cb.getAttribute('data-key'); var pos = cb.getAttribute('data-pos'); if (!settings.buttons[key] || typeof settings.buttons[key] !== 'object') settings.buttons[key] = { right: false, left: false, top: false, bottom: false }; settings.buttons[key][pos] = cb.checked; });
-            var filterEnabled = document.getElementById('lor-filter-enabled'); var filterMode = document.querySelector('input[name="lor-filter-mode"]:checked'); var filterMini = document.getElementById('lor-filter-mini'); var filterAnimate = document.getElementById('lor-filter-animate');
+            btnChecks.forEach(function(cb) {
+                var key = cb.getAttribute('data-key');
+                var pos = cb.getAttribute('data-pos');
+                if (!settings.buttons[key] || typeof settings.buttons[key] !== 'object') settings.buttons[key] = { right: false, left: false, top: false, bottom: false };
+                settings.buttons[key][pos] = cb.checked;
+            });
+
+            var filterEnabled = document.getElementById('lor-filter-enabled');
+            var filterMode = document.querySelector('input[name="lor-filter-mode"]:checked');
+            var filterMini = document.getElementById('lor-filter-mini');
+            var filterAnimate = document.getElementById('lor-filter-animate');
+            var filterDisableScroll = document.getElementById('lor-filter-disable-scroll');
+            var filterHighlightMods = document.getElementById('lor-filter-highlight-mods'); // <--- НОВАЯ ПЕРЕМЕННАЯ
+            var deletedModeRadio = document.querySelector('input[name="lor-filter-deleted-mode"]:checked');
+
             if (filterEnabled) settings.filter.enabled = filterEnabled.checked;
             if (filterMode) settings.filter.mode = filterMode.value;
             if (filterMini) settings.filter.applyToMini = filterMini.checked;
             if (filterAnimate) settings.filter.animateBlur = filterAnimate.checked;
-            var deletedModeRadio = document.querySelector('input[name="lor-filter-deleted-mode"]:checked');
-            if (deletedModeRadio) settings.filter.deletedMode = deletedModeRadio.value;
-
-            var filterDisableScroll = document.getElementById('lor-filter-disable-scroll');
             if (filterDisableScroll) settings.filter.disableScrollInTopics = filterDisableScroll.checked;
+            if (filterHighlightMods) settings.filter.highlightMods = filterHighlightMods.checked; // <--- СОХРАНЕНИЕ НАСТРОЙКИ
+            if (deletedModeRadio) settings.filter.deletedMode = deletedModeRadio.value;
 
             saveSettings(settings);
             window.dispatchEvent(new CustomEvent('lor-filter-settings-changed', { detail: { settings: settings.filter } }));
