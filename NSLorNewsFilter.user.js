@@ -198,10 +198,14 @@
     function onSettingsChanged() {
         state.filterSettings = getPanelFilterSettings();
         state.blacklist = getBlacklist();
+
+        state.modQueue = [];
+
         var articles = getFilterableArticles();
         for (var i = 0; i < articles.length; i++) {
             articles[i]._needsRecheck = true;
         }
+
         filterExistingArticles();
         processDeletedComments();
     }
@@ -399,32 +403,87 @@
         if (state.modQueue.length === 0) return;
 
         var queueItem = state.modQueue.shift();
-        var nick = queueItem.nick;
-        var nickLower = queueItem.nickLower;
+
+        var nick, nickLower;
+        if (typeof queueItem === 'string') {
+            nick = queueItem;
+            nickLower = queueItem.toLowerCase();
+        } else if (queueItem && queueItem.nick) {
+            nick = queueItem.nick;
+            nickLower = queueItem.nickLower;
+        } else {
+            setTimeout(processModQueue, 100);
+            return;
+        }
+
+        var cached = state.modCache[nickLower];
+        if (cached && cached.nick === nick && (Date.now() - cached.ts < CONFIG.MOD_CACHE_TTL)) {
+            applyModToAllArticles(nickLower, cached.isMod);
+            setTimeout(processModQueue, 100);
+            return;
+        }
+
         var url = 'https://www.linux.org.ru/people/' + encodeURIComponent(nick) + '/profile';
 
         fetch(url)
-            .then(function(r) { return r.text(); })
+            .then(function(r) {
+                if (!r.ok) {
+                    throw new Error('HTTP ' + r.status);
+                }
+                return r.text();
+            })
             .then(function(html) {
                 var isMod = /Статус:[\s\S]*?\(модератор\)/i.test(html);
-                state.modCache[nickLower] = { isMod: isMod, ts: Date.now() };
+
+                state.modCache[nickLower] = {
+                    isMod: isMod,
+                    nick: nick,
+                    ts: Date.now()
+                };
                 saveModCache(state.modCache);
 
-                var articles = getFilterableArticles();
-                for (var i = 0; i < articles.length; i++) {
-                    var art = articles[i];
-                    var author = getArticleAuthor(art);
-                    if (author && author.trim().toLowerCase() === nickLower) {
-                        applyModHighlight(art, isMod);
-                        art._modProcessed = true;
-                    }
-                }
-
-                setTimeout(processModQueue, 300);
+                applyModToAllArticles(nickLower, isMod);
+                setTimeout(processModQueue, 100);
             })
-            .catch(function() {
-                setTimeout(processModQueue, 300);
+            .catch(function(err) {
+                setTimeout(processModQueue, 500);
             });
+    }
+
+    function applyModToAllArticles(nickLower, isMod) {
+        var articles = getFilterableArticles();
+
+        for (var i = 0; i < articles.length; i++) {
+            var art = articles[i];
+            var author = getArticleAuthor(art);
+
+            if (author && author.trim().toLowerCase() === nickLower) {
+                applyModHighlight(art, isMod);
+                art._modProcessed = true;
+            }
+        }
+    }
+
+    function applyModToAllArticles(nickLower, isMod) {
+        var articles = getFilterableArticles();
+        var foundCount = 0;
+
+        for (var i = 0; i < articles.length; i++) {
+            var art = articles[i];
+            var author = getArticleAuthor(art);
+
+            if (author && author.trim().toLowerCase() === nickLower) {
+                applyModHighlight(art, isMod);
+                art._modProcessed = true;
+                foundCount++;
+            }
+        }
+
+        if (foundCount > 0) {
+            console.log('✏️ Подсветка применена к ' + foundCount + ' статьям для ' + nickLower);
+        } else {
+            console.log('⚠️ Не найдено статей для ' + nickLower + ' (возможно, страница изменилась)');
+        }
     }
 
     function filterExistingArticles() {
@@ -436,6 +495,10 @@
         if (state.filterSettings.highlightMods) {
             injectModStyles();
             state.modCache = getModCache();
+
+            state.modQueue = state.modQueue.filter(function(item) {
+                return typeof item === 'object' && item.nick && item.nickLower;
+            });
         }
 
         var articles = getFilterableArticles();
@@ -448,21 +511,21 @@
                 var authorMod = getArticleAuthor(art);
                 if (authorMod) {
                     var cleanMod = authorMod.trim().toLowerCase();
+                    var originalNick = authorMod.trim();
 
-                    if (state.modCache[cleanMod] !== undefined) {
+                    var cached = state.modCache[cleanMod];
+                    if (cached && cached.nick === originalNick && (Date.now() - cached.ts < CONFIG.MOD_CACHE_TTL)) {
                         if (!art._modProcessed || art._needsRecheck) {
-                            applyModHighlight(art, state.modCache[cleanMod].isMod);
+                            applyModHighlight(art, cached.isMod);
                             art._modProcessed = true;
                         }
+                    } else if (cached && cached.nick !== originalNick) {
+                        delete state.modCache[cleanMod];
+                        if (addToModQueue(originalNick, cleanMod)) {
+                            queueAdded = true;
+                        }
                     } else {
-                        var alreadyQueued = state.modQueue.some(function(item) {
-                            return item.nickLower === cleanMod;
-                        });
-                        if (!alreadyQueued) {
-                            state.modQueue.push({
-                                nick: authorMod.trim(),
-                                nickLower: cleanMod
-                            });
+                        if (addToModQueue(originalNick, cleanMod)) {
                             queueAdded = true;
                         }
                     }
@@ -512,6 +575,21 @@
             window.removeEventListener('scroll', onScroll);
             state.newsInitialized = false;
         }
+    }
+
+    function addToModQueue(originalNick, cleanMod) {
+        var alreadyQueued = state.modQueue.some(function(item) {
+            return item.nickLower === cleanMod;
+        });
+
+        if (!alreadyQueued) {
+            state.modQueue.push({
+                nick: originalNick,
+                nickLower: cleanMod
+            });
+            return true;
+        }
+        return false;
     }
     function saveAnchor() {
         var existing = getFilterableArticles();
@@ -645,21 +723,26 @@
         state.filterSettings = getPanelFilterSettings();
         state.blacklist = getBlacklist();
 
+        state.modQueue = [];
+
         if (isNewsArticlePage()) {
             state.currentOffset = 0;
         }
 
         filterExistingArticles();
         processDeletedComments();
+
         var events = ['lor-blacklist-changed', 'lor-filter-settings-changed'];
         for (var i = 0; i < events.length; i++) {
             window.addEventListener(events[i], onSettingsChanged);
         }
+
         window.addEventListener('storage', function(e) {
             if (e.key === CONFIG.BLACKLIST_KEY || e.key === CONFIG.PANEL_SETTINGS_KEY) {
                 onSettingsChanged();
             }
         });
+
         var mutationObserver = new MutationObserver(function(mutations) {
             var hasAdded = false;
             for (var i = 0; i < mutations.length; i++) {
@@ -672,6 +755,7 @@
                 setTimeout(filterExistingArticles, CONFIG.MUTATION_DEBOUNCE_MS);
             }
         });
+
         mutationObserver.observe(document.body, { childList: true, subtree: true });
     }
     if (document.readyState === 'loading') {
