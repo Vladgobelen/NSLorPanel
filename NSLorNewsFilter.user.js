@@ -398,21 +398,23 @@
     function processModQueue() {
         if (state.modQueue.length === 0) return;
 
-        var nick = state.modQueue.shift();
+        var queueItem = state.modQueue.shift();
+        var nick = queueItem.nick;
+        var nickLower = queueItem.nickLower;
         var url = 'https://www.linux.org.ru/people/' + encodeURIComponent(nick) + '/profile';
 
         fetch(url)
             .then(function(r) { return r.text(); })
             .then(function(html) {
-                var isMod = /Статус:.*?\(модератор\)/i.test(html);
-                state.modCache[nick] = { isMod: isMod, ts: Date.now() };
+                var isMod = /Статус:[\s\S]*?\(модератор\)/i.test(html);
+                state.modCache[nickLower] = { isMod: isMod, ts: Date.now() };
                 saveModCache(state.modCache);
 
                 var articles = getFilterableArticles();
                 for (var i = 0; i < articles.length; i++) {
                     var art = articles[i];
                     var author = getArticleAuthor(art);
-                    if (author && author.trim().toLowerCase() === nick.toLowerCase()) {
+                    if (author && author.trim().toLowerCase() === nickLower) {
                         applyModHighlight(art, isMod);
                         art._modProcessed = true;
                     }
@@ -446,14 +448,21 @@
                 var authorMod = getArticleAuthor(art);
                 if (authorMod) {
                     var cleanMod = authorMod.trim().toLowerCase();
+
                     if (state.modCache[cleanMod] !== undefined) {
                         if (!art._modProcessed || art._needsRecheck) {
                             applyModHighlight(art, state.modCache[cleanMod].isMod);
                             art._modProcessed = true;
                         }
                     } else {
-                        if (state.modQueue.indexOf(cleanMod) === -1) {
-                            state.modQueue.push(cleanMod);
+                        var alreadyQueued = state.modQueue.some(function(item) {
+                            return item.nickLower === cleanMod;
+                        });
+                        if (!alreadyQueued) {
+                            state.modQueue.push({
+                                nick: authorMod.trim(),
+                                nickLower: cleanMod
+                            });
                             queueAdded = true;
                         }
                     }
@@ -485,6 +494,7 @@
             var isBl = isAuthorBlacklisted(author);
             var hasMark = hasBlurMark(art);
             var shouldFilter = isBl || hasMark;
+
             applyArticleFilterState(art, shouldFilter);
             art._filterProcessed = true;
             art._needsRecheck = false;
