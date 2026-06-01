@@ -792,30 +792,53 @@
       }, true);
   }
 
-  function getOrCloneBtn(title, icon) {
-      let btn = document.querySelector(`div[title="${title}"]`);
-      if (!btn) return null;
+  function getOrCloneBtn(title, fallbackIcon) {
+    let btn = document.querySelector(`div[title="${title}"]`);
+    if (!btn) return null;
 
-      const parent = btn.parentElement;
-      const next = btn.nextSibling;
+    if (btn.hasAttribute('data-lor-nav-replaced')) {
+      const hasContent = (btn.textContent || '').trim().length > 0 ||
+                         btn.querySelector('svg, i, img, span, .icon');
+      if (!hasContent && fallbackIcon) {
+        btn.textContent = fallbackIcon;
+        btn.style.fontSize = '18px';
+        btn.style.lineHeight = '1';
+      }
+      return btn;
+    }
 
-      const clone = btn.cloneNode(false);
-      clone.textContent = btn.textContent;
-      clone.className = btn.className;
-      clone.title = btn.title;
-      clone.style.cssText = btn.style.cssText;
+    const parent = btn.parentElement;
+    if (!parent) return null;
+    const next = btn.nextSibling;
 
-      clone.style.userSelect = 'none';
-      clone.style.webkitUserSelect = 'none';
-      clone.style.webkitTouchCallout = 'none';
-      clone.style.pointerEvents = 'auto';
-      clone.style.cursor = 'pointer';
+    const clone = btn.cloneNode(true);
 
-      btn.remove();
-      if (next) parent.insertBefore(clone, next);
-      else parent.appendChild(clone);
+    const hasText = (clone.textContent || '').trim().length > 0;
+    const hasIconNode = !!(clone.querySelector('svg, i, img, span, .icon'));
+    if (!hasText && !hasIconNode && fallbackIcon) {
+      clone.textContent = fallbackIcon;
+    }
 
-      return clone;
+    clone.className = btn.className;
+    clone.title = btn.title;
+    const baseStyle = btn.getAttribute('style') || '';
+    clone.setAttribute('style', baseStyle +
+      ';user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;' +
+      'pointer-events:auto;cursor:pointer;');
+
+    if (!hasText && !hasIconNode && fallbackIcon) {
+      clone.style.fontSize = '18px';
+      clone.style.lineHeight = '1';
+      clone.style.fontFamily = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+    }
+
+    clone.setAttribute('data-lor-nav-replaced', '1');
+
+    btn.remove();
+    if (next) parent.insertBefore(clone, next);
+    else parent.appendChild(clone);
+
+    return clone;
   }
 
   function createStandaloneButton() {
@@ -895,7 +918,6 @@
     const menBtn = getOrCloneBtn('Упоминания', '📢');
     const searchBtn = getOrCloneBtn('Поиск', '🔍');
 
-    // Проверяем, найдена ли панель (хотя бы одна кнопка)
     const panelFound = myBtn !== null || menBtn !== null || searchBtn !== null;
 
     if (myBtn) {
@@ -931,7 +953,6 @@
       );
     }
 
-    // Если панель не найдена, создаем отдельную кнопку поиска
     if (!panelFound) {
       createStandaloneButton();
     }
