@@ -304,27 +304,8 @@
         style.id = 'lor-mod-highlight-styles';
         style.textContent = `
             .lor-mod-message {
-                position: relative;
-                background: linear-gradient(90deg, rgba(74, 144, 217, 0.04) 0%, rgba(138, 43, 226, 0.02) 50%, transparent 100%) !important;
-                border-left: 3px solid transparent !important;
-                border-image: linear-gradient(180deg, #4a90d9 0%, #8a2be2 50%, #ff6b9d 100%) 1 !important;
-                transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
-                box-shadow: inset 4px 0 12px -4px rgba(74, 144, 217, 0.15) !important;
-            }
-            .lor-mod-message::before {
-                content: "";
-                position: absolute;
-                left: 0;
-                top: 0;
-                bottom: 0;
-                width: 3px;
-                background: linear-gradient(180deg, #4a90d9 0%, #8a2be2 50%, #ff6b9d 100%);
-                box-shadow: 0 0 12px rgba(74, 144, 217, 0.6), 0 0 24px rgba(138, 43, 226, 0.3);
-                animation: lor-mod-glow 3s ease-in-out infinite;
-            }
-            .lor-mod-message:hover {
-                background: linear-gradient(90deg, rgba(74, 144, 217, 0.08) 0%, rgba(138, 43, 226, 0.04) 50%, transparent 100%) !important;
-                box-shadow: inset 4px 0 20px -4px rgba(74, 144, 217, 0.25), 0 0 30px rgba(74, 144, 217, 0.1) !important;
+                border-left: 5px solid #4a90d9 !important;
+                background: none !important;
             }
             .lor-mod-badge {
                 display: inline-flex;
@@ -353,10 +334,6 @@
             }
             .lor-mod-badge::after {
                 content: "MOD";
-            }
-            @keyframes lor-mod-glow {
-                0%, 100% { box-shadow: 0 0 12px rgba(74, 144, 217, 0.6), 0 0 24px rgba(138, 43, 226, 0.3); opacity: 1; }
-                50% { box-shadow: 0 0 18px rgba(74, 144, 217, 0.9), 0 0 36px rgba(138, 43, 226, 0.5); opacity: 0.85; }
             }
             @keyframes lor-mod-pulse {
                 0%, 100% { transform: scale(1); box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3); }
