@@ -1169,7 +1169,7 @@
             var filterMini = document.getElementById('lor-filter-mini');
             var filterAnimate = document.getElementById('lor-filter-animate');
             var filterDisableScroll = document.getElementById('lor-filter-disable-scroll');
-            var filterHighlightMods = document.getElementById('lor-filter-highlight-mods'); // <--- НОВАЯ ПЕРЕМЕННАЯ
+            var filterHighlightMods = document.getElementById('lor-filter-highlight-mods');
             var deletedModeRadio = document.querySelector('input[name="lor-filter-deleted-mode"]:checked');
 
             if (filterEnabled) settings.filter.enabled = filterEnabled.checked;
@@ -1177,7 +1177,7 @@
             if (filterMini) settings.filter.applyToMini = filterMini.checked;
             if (filterAnimate) settings.filter.animateBlur = filterAnimate.checked;
             if (filterDisableScroll) settings.filter.disableScrollInTopics = filterDisableScroll.checked;
-            if (filterHighlightMods) settings.filter.highlightMods = filterHighlightMods.checked; // <--- СОХРАНЕНИЕ НАСТРОЙКИ
+            if (filterHighlightMods) settings.filter.highlightMods = filterHighlightMods.checked;
             if (deletedModeRadio) settings.filter.deletedMode = deletedModeRadio.value;
 
             saveSettings(settings);
