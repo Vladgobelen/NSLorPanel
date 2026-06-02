@@ -279,9 +279,7 @@
             }
             if (isDeletedArticle(art)) {
                 var dMode = state.filterSettings.deletedMode;
-                if (dMode === 'hide') {
-                    applyCutMode(art, true);
-                } else {
+                if (dMode === 'blur' || dMode === 'show') {
                     applyDeletedStyle(art, dMode);
                 }
                 art._filterProcessed = true;
