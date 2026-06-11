@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         NS Universal Swipe Gestures
+// @name         Universal Swipe Gestures
 // @namespace    test
-// @version      2.3.0
+// @version      2.8.0
 // @description  Свайп-жесты в любом месте сайта
 // @match        *://*/*
 // @grant        none
@@ -13,8 +13,9 @@
     'use strict';
 
     const settings = {
-        minSwipeDistance: 50,
-        maxClickMovement: 5
+        minSwipeDistance: 150,
+        maxClickMovement: 5,
+        maxHorizontalDeviation: 10
     };
 
     let gestureState = {
@@ -41,33 +42,25 @@
         pointer-events: none;
     `;
 
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        z-index: 2147483646; background: transparent;
-        display: none;
-    `;
-
     document.body.appendChild(topBar);
     document.body.appendChild(bottomBar);
-    document.body.appendChild(overlay);
+
+    let savedScrollY = 0;
 
     function lockPage() {
-        const scrollY = window.scrollY;
-        overlay.dataset.scrollY = scrollY;
-        overlay.style.display = 'block';
-        
+        savedScrollY = window.scrollY;
+
         document.body.style.overflow = 'hidden';
         document.body.style.position = 'fixed';
         document.body.style.width = '100%';
-        document.body.style.top = `-${scrollY}px`;
+        document.body.style.top = `-${savedScrollY}px`;
         document.body.style.userSelect = 'none';
         document.body.style.webkitUserSelect = 'none';
-        
+
         document.addEventListener('dragstart', preventDrag, true);
         document.addEventListener('drag', preventDrag, true);
         document.addEventListener('dragend', preventDrag, true);
-        
+
         document.querySelectorAll('img, a, [draggable="true"]').forEach(el => {
             el._swipePE = el.style.pointerEvents;
             el.style.pointerEvents = 'none';
@@ -84,20 +77,23 @@
         return false;
     }
 
-    function unlockPage() {
-        overlay.style.display = 'none';
-        
+    function unlockPage(restoreScroll = true) {
         document.body.style.overflow = '';
         document.body.style.position = '';
         document.body.style.width = '';
         document.body.style.top = '';
+
+        if (restoreScroll && savedScrollY > 0) {
+            window.scrollTo(0, savedScrollY);
+        }
+
         document.body.style.userSelect = '';
         document.body.style.webkitUserSelect = '';
-        
+
         document.removeEventListener('dragstart', preventDrag, true);
         document.removeEventListener('drag', preventDrag, true);
         document.removeEventListener('dragend', preventDrag, true);
-        
+
         document.querySelectorAll('img, a, [draggable="true"]').forEach(el => {
             el.style.pointerEvents = el._swipePE || '';
             delete el._swipePE;
@@ -124,6 +120,11 @@
     }
 
     function executeSwipe(direction) {
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+        document.body.style.top = '';
+
         if (direction === 'up') {
             window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
@@ -133,24 +134,16 @@
     }
 
     function finishGesture(direction) {
-        const scrollY = parseInt(overlay.dataset.scrollY) || 0;
-        
-        document.body.style.overflow = '';
-        document.body.style.position = '';
-        document.body.style.width = '';
-        document.body.style.top = '';
-        
         executeSwipe(direction);
-        
         hideIndicators();
-        overlay.style.display = 'none';
+
         document.body.style.userSelect = '';
         document.body.style.webkitUserSelect = '';
-        
+
         document.removeEventListener('dragstart', preventDrag, true);
         document.removeEventListener('drag', preventDrag, true);
         document.removeEventListener('dragend', preventDrag, true);
-        
+
         document.querySelectorAll('img, a, [draggable="true"]').forEach(el => {
             el.style.pointerEvents = el._swipePE || '';
             delete el._swipePE;
@@ -159,7 +152,21 @@
                 delete el._swipeDraggable;
             }
         });
-        
+
+        gestureState = {
+            active: false,
+            startX: 0,
+            startY: 0,
+            isSwipe: false,
+            direction: null
+        };
+    }
+
+    function cancelGesture() {
+        if (gestureState.isSwipe) {
+            hideIndicators();
+            unlockPage(true);
+        }
         gestureState = {
             active: false,
             startX: 0,
@@ -171,8 +178,8 @@
 
     document.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
-        if (e.target.matches('input, textarea, select, [contenteditable="true"]')) return;
-        if (e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+        if (e.target.matches('input, textarea, select, [contenteditable="true"]') ||
+            e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
 
         gestureState.active = true;
         gestureState.startX = e.clientX;
@@ -186,10 +193,16 @@
 
         const deltaX = e.clientX - gestureState.startX;
         const deltaY = e.clientY - gestureState.startY;
-        const totalDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        const absDeltaX = Math.abs(deltaX);
+        const absDeltaY = Math.abs(deltaY);
 
-        if (!gestureState.isSwipe && totalDistance > settings.maxClickMovement) {
-            if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        if (absDeltaX > settings.maxHorizontalDeviation) {
+            cancelGesture();
+            return;
+        }
+
+        if (!gestureState.isSwipe) {
+            if (absDeltaY > settings.maxClickMovement && absDeltaY > absDeltaX) {
                 gestureState.isSwipe = true;
                 gestureState.direction = deltaY < 0 ? 'up' : 'down';
                 lockPage();
@@ -208,45 +221,26 @@
 
     document.addEventListener('mouseup', (e) => {
         if (!gestureState.active) return;
-        
+
         if (gestureState.isSwipe) {
             const deltaY = e.clientY - gestureState.startY;
-            if (Math.abs(deltaY) >= settings.minSwipeDistance) {
+            const deltaX = e.clientX - gestureState.startX;
+
+            if (Math.abs(deltaX) <= settings.maxHorizontalDeviation &&
+                Math.abs(deltaY) >= settings.minSwipeDistance) {
                 finishGesture(gestureState.direction);
             } else {
-                hideIndicators();
-                unlockPage();
-                gestureState = {
-                    active: false,
-                    startX: 0,
-                    startY: 0,
-                    isSwipe: false,
-                    direction: null
-                };
+                cancelGesture();
             }
         } else {
-            gestureState = {
-                active: false,
-                startX: 0,
-                startY: 0,
-                isSwipe: false,
-                direction: null
-            };
+            gestureState.active = false;
         }
     });
 
     document.addEventListener('mouseleave', () => {
-        if (gestureState.active && gestureState.isSwipe) {
-            hideIndicators();
-            unlockPage();
+        if (gestureState.active) {
+            cancelGesture();
         }
-        gestureState = {
-            active: false,
-            startX: 0,
-            startY: 0,
-            isSwipe: false,
-            direction: null
-        };
     });
 
     document.addEventListener('selectstart', (e) => {
