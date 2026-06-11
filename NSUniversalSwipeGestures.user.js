@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Swipe Gestures
 // @namespace    test
-// @version      2.8.0
+// @version      3.0.0
 // @description  Свайп-жесты в любом месте сайта
 // @match        *://*/*
 // @grant        none
@@ -15,7 +15,7 @@
     const settings = {
         minSwipeDistance: 150,
         maxClickMovement: 5,
-        maxHorizontalDeviation: 10
+        maxHorizontalDeviation: 30
     };
 
     let gestureState = {
@@ -237,8 +237,8 @@
         }
     });
 
-    document.addEventListener('mouseleave', () => {
-        if (gestureState.active) {
+    window.addEventListener('blur', () => {
+        if (gestureState.active && gestureState.isSwipe) {
             cancelGesture();
         }
     });
