@@ -6,12 +6,14 @@
 // @grant        none
 // @inject-into  page
 // @run-at       document-end
-// @version      9.20
+// @version      9.21
 // ==/UserScript==
 (function() {
 'use strict';
 let savedPageSelection = '';
 let lastVisualRange = null;
+let previewMode = null;
+
 document.addEventListener('mouseup', function() {
     const sel = window.getSelection();
     const va = document.querySelector('#lor-visual-area');
@@ -311,6 +313,11 @@ const BTN_DEFS = [
     {sep:1},
     {i:'—', t:'Горизонтальная линия', md:{type:'template', template:'\n---\n%CURSOR%\n'}, visual:{cmd:'insertHorizontalRule'}, id:'hr'},
     {i:'␣', t:'Pre-formatted', md:{type:'line-prefix', prefix:'    ', multiline:true}, visual:{cmd:'formatBlock', arg:'pre'}, id:'pre'},
+    {sep:1},
+    {i:'⊞▴', t:'Предпросмотр горизонтальный сверху', action:'preview-horizontal-top', id:'preview-horizontal-top'},
+    {i:'⊞▾', t:'Предпросмотр горизонтальный снизу', action:'preview-horizontal-bottom', id:'preview-horizontal-bottom'},
+    {i:'⊟◀', t:'Предпросмотр вертикальный (ввод справа)', action:'preview-vertical-right', id:'preview-vertical-right'},
+    {i:'⊟▶', t:'Предпросмотр вертикальный (ввод слева)', action:'preview-vertical-left', id:'preview-vertical-left'},
     {sep:1},
     {i:'⚙', t:'Настройки панели', action:'settings', id:'settings'},
     {i:'📋', t:'Шаблоны комментариев', action:'templates', id:'templates'}
@@ -839,6 +846,171 @@ function openTemplatesModal(textarea) {
     document.addEventListener('keydown', function onEsc(e) { if (e.key === 'Escape') { modal.close(); document.removeEventListener('keydown', onEsc); } });
 }
 
+function togglePreview(textarea, mode) {
+    let container = textarea.closest('.markup-tabs__content') || textarea.parentElement;
+    if (!container) return;
+
+    const existingPreview = container.querySelector('.lor-preview-container');
+    if (existingPreview) {
+        existingPreview.remove();
+        previewMode = null;
+        textarea.style.width = '';
+        textarea.style.flex = '';
+        textarea.style.resize = '';
+        textarea.style.minHeight = '';
+        textarea.style.maxHeight = '';
+        textarea.style.display = '';
+        textarea.style.boxSizing = '';
+        const wrapper = container.querySelector('.lor-preview-wrapper');
+        if (wrapper) {
+            const parent = wrapper.parentElement;
+            if (parent) parent.insertBefore(textarea, wrapper);
+            wrapper.remove();
+        }
+        if (textarea._previewCleanup) {
+            textarea._previewCleanup();
+            delete textarea._previewCleanup;
+        }
+        return;
+    }
+
+    previewMode = mode;
+
+    const origHeight = textarea.offsetHeight;
+    const origWidth = textarea.offsetWidth;
+    const computedStyle = getComputedStyle(textarea);
+    const origHeightCSS = computedStyle.height;
+    const origMinHeight = computedStyle.minHeight;
+    const origMaxHeight = computedStyle.maxHeight;
+
+    const sampleMsg = document.querySelector('.msg');
+    let nativeStyles = {};
+    if (sampleMsg) {
+        const cs = getComputedStyle(sampleMsg);
+        nativeStyles = {
+            background: cs.backgroundColor,
+            color: cs.color,
+            fontFamily: cs.fontFamily,
+            fontSize: cs.fontSize,
+            lineHeight: cs.lineHeight,
+            padding: cs.padding,
+            border: cs.border,
+            borderRadius: cs.borderRadius
+        };
+    } else {
+        const isDark = CFG.theme.isDark;
+        nativeStyles = {
+            background: isDark ? 'rgb(0, 0, 64)' : '#f5f5f5',
+            color: isDark ? 'rgb(200, 200, 200)' : '#333',
+            fontFamily: 'sans-serif',
+            fontSize: '14px',
+            lineHeight: '1.5',
+            padding: '8px 16px 16px',
+            border: '1px solid ' + (isDark ? '#333' : '#ccc'),
+            borderRadius: '0px'
+        };
+    }
+
+    const previewContainer = document.createElement('div');
+    previewContainer.className = 'lor-preview-container msg';
+
+    const previewContent = document.createElement('div');
+    previewContent.className = 'msg-body';
+    previewContent.style.cssText = `word-wrap:break-word;`;
+
+    previewContainer.appendChild(previewContent);
+
+    previewContainer.style.cssText += `
+        background: ${nativeStyles.background} !important;
+        color: ${nativeStyles.color} !important;
+        font-family: ${nativeStyles.fontFamily} !important;
+        font-size: ${nativeStyles.fontSize} !important;
+        line-height: ${nativeStyles.lineHeight} !important;
+        padding: ${nativeStyles.padding} !important;
+        border: ${nativeStyles.border} !important;
+        border-radius: ${nativeStyles.borderRadius} !important;
+        overflow-y: auto;
+        box-sizing: border-box;
+    `;
+
+    function updatePreview() {
+        const html = md2html(textarea.value);
+        previewContent.innerHTML = html;
+
+        previewContent.querySelectorAll('a.mention').forEach(a => {
+            a.style.color = CFG.accent;
+            a.style.textDecoration = 'none';
+            a.style.fontWeight = '500';
+            a.onmouseenter = function() { this.style.textDecoration = 'underline'; };
+            a.onmouseleave = function() { this.style.textDecoration = 'none'; };
+        });
+    }
+    updatePreview();
+
+    textarea._previewCleanup = () => {
+        textarea.removeEventListener('input', updatePreview);
+    };
+    textarea.addEventListener('input', updatePreview);
+
+    const isHorizontal = mode === 'preview-horizontal-top' || mode === 'preview-horizontal-bottom';
+    const previewOnTop = mode === 'preview-horizontal-top' || mode === 'preview-vertical-left';
+    const inputOnRight = mode === 'preview-vertical-right';
+
+    if (isHorizontal) {
+        previewContainer.style.cssText += `
+            width: ${origWidth}px;
+            height: ${origHeightCSS};
+            min-height: ${origMinHeight !== 'auto' ? origMinHeight : origHeightCSS};
+            max-height: ${origMaxHeight !== 'none' ? origMaxHeight : origHeightCSS};
+        `;
+        textarea.style.resize = 'vertical';
+
+        if (previewOnTop) {
+            textarea.before(previewContainer);
+        } else {
+            textarea.after(previewContainer);
+        }
+    } else {
+        const halfWidth = Math.floor(origWidth / 2) - 4;
+
+        previewContainer.style.cssText += `
+            width: ${halfWidth}px;
+            height: ${origHeightCSS};
+            min-height: ${origMinHeight !== 'auto' ? origMinHeight : origHeightCSS};
+            max-height: ${origMaxHeight !== 'none' ? origMaxHeight : origHeightCSS};
+        `;
+
+        textarea.style.width = halfWidth + 'px';
+        textarea.style.flex = '0 0 ' + halfWidth + 'px';
+        textarea.style.resize = 'vertical';
+        textarea.style.minHeight = origMinHeight !== 'auto' ? origMinHeight : origHeightCSS;
+        textarea.style.maxHeight = origMaxHeight !== 'none' ? origMaxHeight : origHeightCSS;
+        textarea.style.boxSizing = 'border-box';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'lor-preview-wrapper';
+        wrapper.style.cssText = `
+            display: flex;
+            gap: ${px(8)};
+            width: ${origWidth}px;
+            align-items: stretch;
+            height: ${origHeightCSS};
+            min-height: ${origMinHeight !== 'auto' ? origMinHeight : origHeightCSS};
+            max-height: ${origMaxHeight !== 'none' ? origMaxHeight : origHeightCSS};
+        `;
+
+        textarea.before(wrapper);
+
+        if (inputOnRight) {
+            wrapper.appendChild(previewContainer);
+            wrapper.appendChild(textarea);
+        } else {
+            wrapper.appendChild(textarea);
+            wrapper.appendChild(previewContainer);
+        }
+    }
+}
+
 function buildToolbar(container, insertBefore, onAction) {
     const panel = document.createElement('div'); panel.className = 'lor-toolbar';
     panel.style.cssText = `display:flex;flex-wrap:wrap;gap:${px(6)};align-items:center;padding:${px(8)} ${px(12)};margin:0 0 ${px(10)} 0;background:${CFG.theme.panelBg};border:1px solid ${CFG.theme.border};border-radius:${px(6)};box-sizing:border-box;width:100%;order:-1;`;
@@ -862,6 +1034,31 @@ function buildToolbar(container, insertBefore, onAction) {
             btn.addEventListener('mouseenter', () => { btn.style.background = CFG.theme.btnH; btn.style.borderColor = CFG.accent; });
             btn.addEventListener('mouseleave', () => { btn.style.background = CFG.theme.btn; btn.style.borderColor = CFG.theme.border; });
             btn.addEventListener('click', (e) => { e.preventDefault(); const ta = historyManager.getTextarea(); if (ta) openTemplatesModal(ta); btn.style.background = CFG.accent; btn.style.color = '#fff'; setTimeout(() => { btn.style.background = CFG.theme.btn; btn.style.color = CFG.theme.txt; }, 150); });
+        } else if (def.action && def.action.startsWith('preview-')) {
+            btn.addEventListener('mouseenter', () => { btn.style.background = CFG.theme.btnH; btn.style.borderColor = CFG.accent; });
+            btn.addEventListener('mouseleave', () => { btn.style.background = CFG.theme.btn; btn.style.borderColor = CFG.theme.border; });
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const ta = historyManager.getTextarea();
+                if (!ta) return;
+                const actionMode = def.action;
+
+                if (previewMode === actionMode) {
+                    if (ta._previewCleanup) ta._previewCleanup();
+                    previewMode = null;
+                } else {
+                    if (previewMode !== null && ta._previewCleanup) {
+                        ta._previewCleanup();
+                    }
+                    togglePreview(ta, actionMode);
+                }
+                btn.style.background = CFG.accent;
+                btn.style.color = '#fff';
+                setTimeout(() => {
+                    btn.style.background = CFG.theme.btn;
+                    btn.style.color = CFG.theme.txt;
+                }, 150);
+            });
         } else {
             btn.addEventListener('mouseenter', () => { btn.style.background = CFG.theme.btnH; btn.style.borderColor = CFG.accent; });
             btn.addEventListener('mouseleave', () => { btn.style.background = CFG.theme.btn; btn.style.borderColor = CFG.theme.border; });
