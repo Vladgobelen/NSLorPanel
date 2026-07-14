@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NSLorSound
 // @namespace    test
-// @version      2.3.0
+// @version      2.7.0
 // @description  Sound notifications for linux.org.ru
 // @match        https://www.linux.org.ru/*
 // @grant        none
@@ -57,15 +57,23 @@
         });
     }
 
-    function base64ToBlob(base64) {
+    function base64ToArrayBuffer(base64) {
         const parts = base64.split(',');
-        const mimeType = parts[0].match(/:(.*?);/)[1];
         const binaryString = atob(parts[1]);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
         }
-        return new Blob([bytes], { type: mimeType });
+        return bytes.buffer;
+    }
+
+    function unlockAudio() {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioContext.state === 'suspended') {
+            audioContext.resume().catch(() => {});
+        }
     }
 
     function playSound(type) {
@@ -96,20 +104,11 @@
                 return;
             }
 
-            const blob = base64ToBlob(soundData);
-            const url = URL.createObjectURL(blob);
-
-            fetch(url)
-                .then(r => r.arrayBuffer())
-                .then(buffer => audioContext.decodeAudioData(buffer))
-                .then(audioBuffer => {
-                    soundCache[type] = audioBuffer;
-                    URL.revokeObjectURL(url);
-                    playFromBuffer(audioBuffer);
-                })
-                .catch(() => {
-                    URL.revokeObjectURL(url);
-                });
+            const arrayBuffer = base64ToArrayBuffer(soundData);
+            audioContext.decodeAudioData(arrayBuffer, function(audioBuffer) {
+                soundCache[type] = audioBuffer;
+                playFromBuffer(audioBuffer);
+            }, function() {});
         } catch (e) {}
     }
 
@@ -195,6 +194,7 @@
             const currentCount = parseInt(text) || 0;
 
             if (currentCount > lastCount) {
+                unlockAudio();
                 fetchAndPlay();
                 lastCount = currentCount;
             } else {
@@ -250,61 +250,67 @@
 
         function checkNewComment() {
             const targetText = 'Был добавлен новый комментарий';
-            const walker = document.createTreeWalker(
-                document.body,
-                NodeFilter.SHOW_TEXT,
-                {
-                    acceptNode: function(node) {
-                        if (node.textContent.includes(targetText)) {
-                            return NodeFilter.FILTER_ACCEPT;
-                        }
-                        return NodeFilter.FILTER_REJECT;
-                    }
-                }
-            );
-
-            let node;
-            while (node = walker.nextNode()) {
+            const realtimeEl = document.getElementById('realtime');
+            if (realtimeEl && realtimeEl.textContent && realtimeEl.textContent.includes(targetText)) {
                 if (!newCommentFound) {
                     newCommentFound = true;
+                    unlockAudio();
                     playSound('newComment');
                 }
-                return;
+                return true;
             }
+            return false;
         }
 
         checkNewComment();
+
+        const realtimeEl = document.getElementById('realtime');
+        if (!realtimeEl) {
+            setTimeout(startNewCommentMonitoring, 1000);
+            return;
+        }
 
         newCommentObserver = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
                 if (mutation.type === 'childList') {
                     mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === Node.TEXT_NODE) {
+                            if (node.textContent && node.textContent.includes('Был добавлен новый комментарий')) {
+                                if (!newCommentFound) {
+                                    newCommentFound = true;
+                                    unlockAudio();
+                                    playSound('newComment');
+                                }
+                            }
+                        }
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             if (node.textContent && node.textContent.includes('Был добавлен новый комментарий')) {
                                 if (!newCommentFound) {
                                     newCommentFound = true;
+                                    unlockAudio();
                                     playSound('newComment');
                                 }
-                                return;
                             }
-                            const descendants = node.querySelectorAll('*');
-                            descendants.forEach(function(desc) {
-                                if (desc.textContent && desc.textContent.includes('Был добавлен новый комментарий')) {
-                                    if (!newCommentFound) {
-                                        newCommentFound = true;
-                                        playSound('newComment');
-                                    }
-                                }
-                            });
                         }
                     });
+                }
+                if (mutation.type === 'characterData') {
+                    if (mutation.target && mutation.target.textContent && mutation.target.textContent.includes('Был добавлен новый комментарий')) {
+                        if (!newCommentFound) {
+                            newCommentFound = true;
+                            unlockAudio();
+                            playSound('newComment');
+                        }
+                    }
                 }
             });
         });
 
-        newCommentObserver.observe(document.body, {
+        newCommentObserver.observe(realtimeEl, {
+            characterData: true,
             childList: true,
-            subtree: true
+            subtree: true,
+            attributes: true
         });
     }
 
@@ -539,9 +545,7 @@
                         alert('Сначала выберите звуковой файл!');
                         return;
                     }
-                    if (audioContext && audioContext.state === 'suspended') {
-                        audioContext.resume();
-                    }
+                    unlockAudio();
                     playSound(type);
                 };
                 btnGroup.appendChild(testBtn);
@@ -594,7 +598,7 @@
                 • Звуки хранятся в localStorage<br>
                 • При появлении уведомления определяется его тип<br>
                 • Воспроизводится выбранный звук<br>
-                • Для работы звука необходим клик по странице
+                • Клик по странице разблокирует звук
             `;
             contentContainer.appendChild(hint);
         }
@@ -652,6 +656,7 @@
             this.style.transform = 'scale(1)';
         });
         btn.addEventListener('click', function() {
+            unlockAudio();
             openSoundModal();
         });
 
@@ -877,9 +882,7 @@
                     alert('Сначала выберите звуковой файл!');
                     return;
                 }
-                if (audioContext && audioContext.state === 'suspended') {
-                    audioContext.resume();
-                }
+                unlockAudio();
                 playSound(type);
             };
             btnGroup.appendChild(testBtn);
@@ -915,6 +918,9 @@
 
     function init() {
         updatePanelSettings();
+
+        document.addEventListener('click', unlockAudio);
+        document.addEventListener('keydown', unlockAudio);
 
         setTimeout(() => {
             const panel = document.querySelector('.lor-panel-container, .lor-mobile-collapsed');
