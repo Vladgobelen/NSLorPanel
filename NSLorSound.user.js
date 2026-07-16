@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NSLorSound
 // @namespace    test
-// @version      2.7.0
+// @version      2.8.0
 // @description  Sound notifications for linux.org.ru
 // @match        https://www.linux.org.ru/*
 // @grant        none
@@ -152,24 +152,35 @@
         const firstCell = row.querySelector('td:first-child');
         if (!firstCell) return 'unknown';
 
-        const text = firstCell.textContent.trim();
-        if (text && text.length > 0) {
-            return 'reaction';
-        }
-
-        const icon = firstCell.querySelector('i');
-        if (icon) {
+        // Проверяем иконки действий (ответы, упоминания, удаления)
+        const icons = firstCell.querySelectorAll('i');
+        for (const icon of icons) {
             const cls = icon.className || '';
             const title = icon.getAttribute('title') || '';
+
             if (title.includes('Ответ') || cls.includes('icon-reply')) return 'reply';
             if (cls.includes('icon-user')) return 'mention';
             if (title.includes('Упоминание') || cls.includes('icon-mention')) return 'mention';
             if (title.includes('Нарушение') || cls.includes('icon-violation')) return 'deleted';
         }
 
-        const img = firstCell.querySelector('img');
-        if (img && img.getAttribute('title') && img.getAttribute('title').includes('удалено')) {
-            return 'deleted';
+        // Проверяем картинки на удаление
+        const imgs = firstCell.querySelectorAll('img');
+        for (const img of imgs) {
+            const title = img.getAttribute('title') || '';
+            if (title.includes('удалено')) return 'deleted';
+
+            // Определяем реакцию по эмодзи-картинкам
+            const src = img.src || '';
+            if (src.includes('twemoji') || src.includes('emoji')) {
+                return 'reaction';
+            }
+        }
+
+        // Проверяем текстовые реакции (старый формат, запасной вариант)
+        const text = firstCell.textContent.trim();
+        if (text && text.length > 0) {
+            return 'reaction';
         }
 
         return 'unknown';
