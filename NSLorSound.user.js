@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NSLorSound
 // @namespace    test
-// @version      2.9.0
+// @version      2.9.2
 // @description  Sound notifications for linux.org.ru
 // @match        https://www.linux.org.ru/*
 // @grant        none
@@ -32,6 +32,9 @@
     let soundCache = {};
     let newCommentFound = false;
     let newCommentObserver = null;
+    let audioUnlocked = false;
+    let unlockBanner = null;
+    let showWarning = loadShowWarning();
 
     function log(msg, data) {
         const prefix = '[NSLorSound]';
@@ -57,6 +60,19 @@
         localStorage.setItem(SOUND_SETTINGS_KEY, JSON.stringify(soundSettings));
     }
 
+    function loadShowWarning() {
+        try {
+            const saved = localStorage.getItem('lor_sound_show_warning');
+            return saved !== null ? JSON.parse(saved) : true;
+        } catch (e) {
+            return true;
+        }
+    }
+
+    function saveShowWarning(value) {
+        localStorage.setItem('lor_sound_show_warning', JSON.stringify(value));
+    }
+
     function fileToBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -76,12 +92,87 @@
         return bytes.buffer;
     }
 
+    function createUnlockBanner() {
+        if (unlockBanner) return;
+        if (!showWarning) return;
+        
+        updatePanelSettings();
+        
+        unlockBanner = document.createElement('div');
+        unlockBanner.id = 'lor-sound-unlock-banner';
+        unlockBanner.innerHTML = '🔊 Кликните для звука';
+        unlockBanner.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: ${isDark ? '#1a3a1a' : '#2d5a27'};
+            color: #fff;
+            text-align: center;
+            padding: 10px 24px;
+            font-size: 13px;
+            font-family: Arial, sans-serif;
+            z-index: 100000;
+            cursor: pointer;
+            border-radius: 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+            border: 1px solid ${isDark ? '#3a6a3a' : '#4CAF50'};
+            transition: all 0.3s;
+            white-space: nowrap;
+            user-select: none;
+        `;
+
+        unlockBanner.addEventListener('mouseenter', function() {
+            this.style.background = isDark ? '#2a5a2a' : '#3d7a37';
+            this.style.transform = 'translateX(-50%) scale(1.05)';
+        });
+
+        unlockBanner.addEventListener('mouseleave', function() {
+            this.style.background = isDark ? '#1a3a1a' : '#2d5a27';
+            this.style.transform = 'translateX(-50%) scale(1)';
+        });
+
+        unlockBanner.addEventListener('click', function() {
+            unlockAudio();
+        });
+
+        document.body.appendChild(unlockBanner);
+        log('Плашка разблокировки показана');
+    }
+
+    function hideUnlockBanner() {
+        if (unlockBanner) {
+            unlockBanner.style.opacity = '0';
+            unlockBanner.style.transform = 'translateX(-50%) translateY(-20px)';
+            setTimeout(() => {
+                if (unlockBanner && unlockBanner.parentNode) {
+                    unlockBanner.parentNode.removeChild(unlockBanner);
+                    unlockBanner = null;
+                }
+            }, 300);
+        }
+    }
+
     function unlockAudio() {
         if (!audioContext) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            } catch(e) {
+                log('Ошибка создания AudioContext:', e);
+                return;
+            }
         }
         if (audioContext.state === 'suspended') {
-            audioContext.resume().catch(() => {});
+            audioContext.resume().then(() => {
+                if (audioContext.state === 'running') {
+                    audioUnlocked = true;
+                    log('✅ Аудио разблокировано');
+                    hideUnlockBanner();
+                }
+            }).catch(() => {});
+        } else if (audioContext.state === 'running') {
+            audioUnlocked = true;
+            hideUnlockBanner();
         }
     }
 
@@ -89,6 +180,12 @@
         const soundData = soundSettings[type];
         if (!soundData) {
             log(`Звук для "${type}" не настроен`);
+            return;
+        }
+
+        if (!audioUnlocked) {
+            log(`Аудио заблокировано, показываем плашку`);
+            createUnlockBanner();
             return;
         }
 
@@ -168,7 +265,7 @@
         const allElements = firstCell.querySelectorAll('*');
         for (const el of allElements) {
             const title = (el.getAttribute('title') || '').toLowerCase();
-            if (title.includes('удален') || title.includes('удалено') ||
+            if (title.includes('удален') || title.includes('удалено') || 
                 title.includes('нарушение') || title.includes('delete')) {
                 return 'deleted';
             }
@@ -593,6 +690,51 @@
                 contentContainer.appendChild(row);
             });
 
+            const warningDiv = document.createElement('div');
+            warningDiv.style.cssText = `
+                margin-top: ${Math.round(16 * scale)}px;
+                padding: ${Math.round(12 * scale)}px ${Math.round(16 * scale)}px;
+                background: ${isDark ? '#0d0d1a' : '#f9f9f9'};
+                border: 1px solid ${isDark ? '#2a2a3a' : '#e0e0e0'};
+                border-radius: ${Math.round(8 * scale)}px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            `;
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = 'lor-sound-show-warning';
+            checkbox.checked = showWarning;
+            checkbox.style.cssText = `
+                width: ${Math.round(18 * scale)}px;
+                height: ${Math.round(18 * scale)}px;
+                cursor: pointer;
+                accent-color: #4CAF50;
+            `;
+            checkbox.onchange = function() {
+                showWarning = this.checked;
+                saveShowWarning(showWarning);
+                log(`Предупреждение ${showWarning ? 'включено' : 'выключено'}`);
+                if (!showWarning) {
+                    hideUnlockBanner();
+                }
+            };
+
+            const checkboxLabel = document.createElement('label');
+            checkboxLabel.htmlFor = 'lor-sound-show-warning';
+            checkboxLabel.textContent = 'Отображать предупреждение о разблокировке звука';
+            checkboxLabel.style.cssText = `
+                color: ${isDark ? '#ccc' : '#333'};
+                font-size: ${Math.round(13 * scale)}px;
+                cursor: pointer;
+                user-select: none;
+            `;
+
+            warningDiv.appendChild(checkbox);
+            warningDiv.appendChild(checkboxLabel);
+            contentContainer.appendChild(warningDiv);
+
             const saveDiv = document.createElement('div');
             saveDiv.style.cssText = `
                 text-align: right;
@@ -933,6 +1075,51 @@
             content.appendChild(row);
         });
 
+        const warningDiv = document.createElement('div');
+        warningDiv.style.cssText = `
+            margin-top: ${Math.round(16 * scale)}px;
+            padding: ${Math.round(12 * scale)}px ${Math.round(16 * scale)}px;
+            background: ${isDark ? '#0d0d1a' : '#f9f9f9'};
+            border: 1px solid ${isDark ? '#2a2a3a' : '#e0e0e0'};
+            border-radius: ${Math.round(8 * scale)}px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        `;
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = 'lor-sound-show-warning-modal';
+        checkbox.checked = showWarning;
+        checkbox.style.cssText = `
+            width: ${Math.round(18 * scale)}px;
+            height: ${Math.round(18 * scale)}px;
+            cursor: pointer;
+            accent-color: #4CAF50;
+        `;
+        checkbox.onchange = function() {
+            showWarning = this.checked;
+            saveShowWarning(showWarning);
+            log(`Предупреждение ${showWarning ? 'включено' : 'выключено'}`);
+            if (!showWarning) {
+                hideUnlockBanner();
+            }
+        };
+
+        const checkboxLabel = document.createElement('label');
+        checkboxLabel.htmlFor = 'lor-sound-show-warning-modal';
+        checkboxLabel.textContent = 'Отображать предупреждение о разблокировке звука';
+        checkboxLabel.style.cssText = `
+            color: ${isDark ? '#ccc' : '#333'};
+            font-size: ${Math.round(13 * scale)}px;
+            cursor: pointer;
+            user-select: none;
+        `;
+
+        warningDiv.appendChild(checkbox);
+        warningDiv.appendChild(checkboxLabel);
+        content.appendChild(warningDiv);
+
         const saveDiv = document.createElement('div');
         saveDiv.style.cssText = `text-align:right;margin-top:${Math.round(16 * scale)}px;padding-top:${Math.round(12 * scale)}px;border-top:1px solid ${isDark ? '#333' : '#ccc'};`;
 
@@ -961,12 +1148,16 @@
 
     function init() {
         updatePanelSettings();
-        log('NSLorSound v2.9.0 запущен');
+        log('NSLorSound v2.9.2 запущен');
 
         document.addEventListener('click', unlockAudio);
         document.addEventListener('keydown', unlockAudio);
 
         setTimeout(() => {
+            if (showWarning) {
+                createUnlockBanner();
+            }
+
             const panel = document.querySelector('.lor-panel-container, .lor-mobile-collapsed');
             if (panel) {
                 initPanelIntegration();
