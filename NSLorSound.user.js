@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NSLorSound
 // @namespace    test
-// @version      2.8.0
+// @version      2.9.0
 // @description  Sound notifications for linux.org.ru
 // @match        https://www.linux.org.ru/*
 // @grant        none
@@ -32,6 +32,15 @@
     let soundCache = {};
     let newCommentFound = false;
     let newCommentObserver = null;
+
+    function log(msg, data) {
+        const prefix = '[NSLorSound]';
+        if (data !== undefined) {
+            console.log(prefix, msg, data);
+        } else {
+            console.log(prefix, msg);
+        }
+    }
 
     function loadSettings() {
         try {
@@ -79,6 +88,7 @@
     function playSound(type) {
         const soundData = soundSettings[type];
         if (!soundData) {
+            log(`Звук для "${type}" не настроен`);
             return;
         }
 
@@ -100,24 +110,27 @@
     function playSoundInternal(type, soundData) {
         try {
             if (soundCache[type]) {
-                playFromBuffer(soundCache[type]);
+                playFromBuffer(soundCache[type], type);
                 return;
             }
 
             const arrayBuffer = base64ToArrayBuffer(soundData);
             audioContext.decodeAudioData(arrayBuffer, function(audioBuffer) {
                 soundCache[type] = audioBuffer;
-                playFromBuffer(audioBuffer);
-            }, function() {});
+                playFromBuffer(audioBuffer, type);
+            }, function(err) {
+                log(`Ошибка декодирования звука "${type}":`, err);
+            });
         } catch (e) {}
     }
 
-    function playFromBuffer(buffer) {
+    function playFromBuffer(buffer, type) {
         try {
             const source = audioContext.createBufferSource();
             source.buffer = buffer;
             source.connect(audioContext.destination);
             source.start(0);
+            log(`🔊 Воспроизведен звук: ${type}`);
         } catch (e) {}
     }
 
@@ -152,32 +165,37 @@
         const firstCell = row.querySelector('td:first-child');
         if (!firstCell) return 'unknown';
 
-        // Проверяем иконки действий (ответы, упоминания, удаления)
-        const icons = firstCell.querySelectorAll('i');
-        for (const icon of icons) {
-            const cls = icon.className || '';
-            const title = icon.getAttribute('title') || '';
-
-            if (title.includes('Ответ') || cls.includes('icon-reply')) return 'reply';
-            if (cls.includes('icon-user')) return 'mention';
-            if (title.includes('Упоминание') || cls.includes('icon-mention')) return 'mention';
-            if (title.includes('Нарушение') || cls.includes('icon-violation')) return 'deleted';
+        const allElements = firstCell.querySelectorAll('*');
+        for (const el of allElements) {
+            const title = (el.getAttribute('title') || '').toLowerCase();
+            if (title.includes('удален') || title.includes('удалено') ||
+                title.includes('нарушение') || title.includes('delete')) {
+                return 'deleted';
+            }
         }
 
-        // Проверяем картинки на удаление
+        const icons = firstCell.querySelectorAll('i');
+        for (const icon of icons) {
+            const cls = (icon.className || '').toLowerCase();
+            const title = (icon.getAttribute('title') || '').toLowerCase();
+
+            if (title.includes('ответ') || cls.includes('icon-reply')) return 'reply';
+            if (cls.includes('icon-user')) return 'mention';
+            if (title.includes('упоминание') || cls.includes('icon-mention')) return 'mention';
+            if (title.includes('нарушение') || cls.includes('icon-violation')) return 'deleted';
+        }
+
         const imgs = firstCell.querySelectorAll('img');
         for (const img of imgs) {
-            const title = img.getAttribute('title') || '';
-            if (title.includes('удалено')) return 'deleted';
+            const title = (img.getAttribute('title') || '').toLowerCase();
+            if (title.includes('удалено') || title.includes('удален')) return 'deleted';
 
-            // Определяем реакцию по эмодзи-картинкам
             const src = img.src || '';
             if (src.includes('twemoji') || src.includes('emoji')) {
                 return 'reaction';
             }
         }
 
-        // Проверяем текстовые реакции (старый формат, запасной вариант)
         const text = firstCell.textContent.trim();
         if (text && text.length > 0) {
             return 'reaction';
@@ -205,6 +223,7 @@
             const currentCount = parseInt(text) || 0;
 
             if (currentCount > lastCount) {
+                log(`📨 Новое уведомление! Счетчик: ${lastCount} → ${currentCount}`);
                 unlockAudio();
                 fetchAndPlay();
                 lastCount = currentCount;
@@ -243,12 +262,15 @@
 
                 if (rows.length > 0) {
                     const type = getNotificationType(rows[0]);
+                    log(`Определен тип уведомления: ${type}`);
                     if (type !== 'unknown') {
                         playSound(type);
                     }
                 }
             })
-            .catch(() => {});
+            .catch((err) => {
+                log('Ошибка загрузки уведомлений:', err);
+            });
     }
 
     function startNewCommentMonitoring() {
@@ -265,6 +287,7 @@
             if (realtimeEl && realtimeEl.textContent && realtimeEl.textContent.includes(targetText)) {
                 if (!newCommentFound) {
                     newCommentFound = true;
+                    log('💬 Новый комментарий на странице');
                     unlockAudio();
                     playSound('newComment');
                 }
@@ -289,6 +312,7 @@
                             if (node.textContent && node.textContent.includes('Был добавлен новый комментарий')) {
                                 if (!newCommentFound) {
                                     newCommentFound = true;
+                                    log('💬 Новый комментарий на странице');
                                     unlockAudio();
                                     playSound('newComment');
                                 }
@@ -298,6 +322,7 @@
                             if (node.textContent && node.textContent.includes('Был добавлен новый комментарий')) {
                                 if (!newCommentFound) {
                                     newCommentFound = true;
+                                    log('💬 Новый комментарий на странице');
                                     unlockAudio();
                                     playSound('newComment');
                                 }
@@ -309,6 +334,7 @@
                     if (mutation.target && mutation.target.textContent && mutation.target.textContent.includes('Был добавлен новый комментарий')) {
                         if (!newCommentFound) {
                             newCommentFound = true;
+                            log('💬 Новый комментарий на странице');
                             unlockAudio();
                             playSound('newComment');
                         }
@@ -491,6 +517,7 @@
                                 delete soundCache[type];
                                 fileName.textContent = '✅ Выбран';
                                 fileName.style.color = '#4CAF50';
+                                log(`Звук для "${type}" обновлен`);
                             } catch (e) {}
                         }
                     };
@@ -526,6 +553,7 @@
                     delete soundCache[type];
                     fileName.textContent = '❌ Не выбран';
                     fileName.style.color = isDark ? '#888' : '#999';
+                    log(`Звук для "${type}" очищен`);
                 };
                 btnGroup.appendChild(clearBtn);
 
@@ -589,6 +617,7 @@
             saveBtn.onmouseleave = function() { this.style.background = '#0a3d6b'; };
             saveBtn.onclick = function() {
                 saveSettings();
+                log('Настройки звуков сохранены');
                 alert('✅ Настройки звуков сохранены!');
             };
             saveDiv.appendChild(saveBtn);
@@ -830,6 +859,7 @@
                             delete soundCache[type];
                             fileName.textContent = '✅ Выбран';
                             fileName.style.color = '#4CAF50';
+                            log(`Звук для "${type}" обновлен`);
                         } catch (e) {}
                     }
                 };
@@ -864,6 +894,7 @@
                 delete soundCache[type];
                 fileName.textContent = '❌ Не выбран';
                 fileName.style.color = isDark ? '#888' : '#999';
+                log(`Звук для "${type}" очищен`);
             };
             btnGroup.appendChild(clearBtn);
 
@@ -921,6 +952,7 @@
         saveBtn.onmouseleave = function() { this.style.background = '#0a3d6b'; };
         saveBtn.onclick = function() {
             saveSettings();
+            log('Настройки звуков сохранены');
             alert('✅ Настройки звуков сохранены!');
         };
         saveDiv.appendChild(saveBtn);
@@ -929,6 +961,7 @@
 
     function init() {
         updatePanelSettings();
+        log('NSLorSound v2.9.0 запущен');
 
         document.addEventListener('click', unlockAudio);
         document.addEventListener('keydown', unlockAudio);
