@@ -359,10 +359,21 @@
     }
 
     function updateNotificationBadge(btn) {
-        const ce = document.getElementById('main_events_count'), raw = ce ? ce.textContent : '(0)', count = parseInt(raw.replace(/[^0-9]/g, '')) || 0;
+        let count = 0;
+        const ce = document.getElementById('main_events_count');
+        if (ce) {
+            count = parseInt(ce.textContent.replace(/[^0-9]/g, '')) || 0;
+        } else {
+            const bellLink = document.querySelector('a[href="/notifications"], a[href="https://www.linux.org.ru/notifications"], a[href$="/notifications"]');
+            if (bellLink) {
+                count = parseInt(bellLink.textContent.replace(/[^0-9]/g, '')) || 0;
+            }
+        }
+
         btn.textContent = count > 0 ? count : '🔔';
         const settings = getSettings(), scale = getScale(settings), fs = Math.round(24 * scale);
-        btn.style.fontSize = count > 0 ? Math.round(28 * scale) + 'px' : fs + 'px'; btn.style.fontWeight = 'bold';
+        btn.style.fontSize = count > 0 ? Math.round(28 * scale) + 'px' : fs + 'px';
+        btn.style.fontWeight = 'bold';
     }
 
     function addDesktopPanel() {
